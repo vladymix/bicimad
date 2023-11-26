@@ -196,7 +196,7 @@ void app_main(void)
             oled_display_text(&oled, 1, "Lux is: " , false);
             oled_display_text(&oled, 2, "              " , false);
             oled_display_text(&oled, 2, data , false);
-            oled_display_text(&oled, 3, "            " , false);
+            oled_display_text(&oled, 3, "             " , false);
 
             sendData(mqtt, value);
            
