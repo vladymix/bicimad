@@ -30,7 +30,40 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 
+#include "cJSON.h"
+#include "libs/sbc.h"
+
+#include <esp_timer.h>
+
 static const char *TAG = "mqtt_example";
+AnalogicDevice lux;
+ esp_mqtt_client_handle_t mqtt = NULL;
+
+//{clientId:"ckawzufasqcuwqy7i7gf"}
+esp_mqtt_client_config_t mqtt_cfg = {
+    .broker.address.uri = CONFIG_BROKER_URL,
+    .broker.address.port = 1883,
+    .credentials.client_id = "ckawzufasqcuwqy7i7gf"
+};
+
+static void sendData(esp_mqtt_client_handle_t client)
+{
+    // Crear json que se quiere enviar al ThingsBoard
+    cJSON *root = cJSON_CreateObject();
+
+    int value = readAdc1Value(&lux);
+    printf("Read value Lux %d.\n", value);
+    cJSON_AddNumberToObject(root, "lux", value);
+    cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
+    // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
+
+    char *post_data = cJSON_PrintUnformatted(root);
+    // Enviar los datos
+    esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0);
+    // v1/  devices / me / telemetry sale de la MQTT Device API Reference de ThingsBoard cJSON_Delete(root);
+    // Free is intentional, it's client responsibility to free the result of cJSON_Print
+    free(post_data);
+}
 
 
 static void log_error_if_nonzero(const char *message, int error_code)
@@ -40,16 +73,6 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
-/*
- * @brief Event handler registered to receive MQTT events
- *
- *  This function is called by the MQTT client event loop.
- *
- * @param handler_args user data registered to the event.
- * @param base Event base for the handler(always MQTT Base in this example).
- * @param event_id The id for the received event.
- * @param event_data The data for the event, esp_mqtt_event_handle_t.
- */
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32 "", base, event_id);
@@ -70,9 +93,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
         msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
         ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
+
+        mqtt = client;
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        mqtt = NULL;
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -109,42 +135,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
 static void mqtt_app_start(void)
 {
-    esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = CONFIG_BROKER_URL,
-    };
-#if CONFIG_BROKER_URL_FROM_STDIN
-    char line[128];
-
-    if (strcmp(mqtt_cfg.broker.address.uri, "FROM_STDIN") == 0) {
-        int count = 0;
-        printf("Please enter url of mqtt broker\n");
-        while (count < 128) {
-            int c = fgetc(stdin);
-            if (c == '\n') {
-                line[count] = '\0';
-                break;
-            } else if (c > 0 && c < 127) {
-                line[count] = c;
-                ++count;
-            }
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
-        mqtt_cfg.broker.address.uri = line;
-        printf("Broker url: %s\n", line);
-    } else {
-        ESP_LOGE(TAG, "Configuration mismatch: wrong broker url");
-        abort();
-    }
-#endif /* CONFIG_BROKER_URL_FROM_STDIN */
-
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
 }
 
-void app_main(void)
-{
+static void initMqtt(void){
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
@@ -168,4 +165,24 @@ void app_main(void)
     ESP_ERROR_CHECK(example_connect());
 
     mqtt_app_start();
+}
+
+void app_main(void)
+{
+    lux.channel = ADC1_CHANNEL_4;
+    lux.adc_atten = ADC_ATTEN_DB_11;
+    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
+    initAdc1(&lux);
+    initMqtt();
+
+    while (1)
+    {
+        if(mqtt){
+            printf("Sending data\n");
+            sendData(mqtt);
+           
+        }
+        delayms(1000);
+    }
+    
 }
