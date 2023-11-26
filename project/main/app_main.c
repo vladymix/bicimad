@@ -35,9 +35,15 @@
 
 #include <esp_timer.h>
 
+/******** OLED ************/
+#define CONFIG_SCL_GPIO 19 // SCK
+#define CONFIG_SDA_GPIO 21
+#define CONFIG_RESET_GPIO -1 // no contains reset pin display
+
 static const char *TAG = "mqtt_example";
 AnalogicDevice lux;
- esp_mqtt_client_handle_t mqtt = NULL;
+esp_mqtt_client_handle_t mqtt = NULL;
+OLed oled;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"}
 esp_mqtt_client_config_t mqtt_cfg = {
@@ -46,13 +52,10 @@ esp_mqtt_client_config_t mqtt_cfg = {
     .credentials.client_id = "ckawzufasqcuwqy7i7gf"
 };
 
-static void sendData(esp_mqtt_client_handle_t client)
+static void sendData(esp_mqtt_client_handle_t client, int value)
 {
     // Crear json que se quiere enviar al ThingsBoard
     cJSON *root = cJSON_CreateObject();
-
-    int value = readAdc1Value(&lux);
-    printf("Read value Lux %d.\n", value);
     cJSON_AddNumberToObject(root, "lux", value);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
     // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
@@ -64,7 +67,6 @@ static void sendData(esp_mqtt_client_handle_t client)
     // Free is intentional, it's client responsibility to free the result of cJSON_Print
     free(post_data);
 }
-
 
 static void log_error_if_nonzero(const char *message, int error_code)
 {
@@ -173,15 +175,35 @@ void app_main(void)
     lux.adc_atten = ADC_ATTEN_DB_11;
     lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
     initAdc1(&lux);
+
+    oled._sda = CONFIG_SDA_GPIO;
+    oled._slc = CONFIG_SCL_GPIO;
+    oled._reset = CONFIG_RESET_GPIO;
+    initOled(&oled);
+    oled_clear_screen(&oled, false);
+    oled_display_text(&oled, 7, "     v1.0.0", false);
+    oled_display_text(&oled, 3, "Wait wifi..." , false);
     initMqtt();
 
     while (1)
     {
         if(mqtt){
             printf("Sending data\n");
-            sendData(mqtt);
+            int value = readAdc1Value(&lux);
+            printf("Read value Lux %d.\n", value);
+            char data[14];
+            sprintf(data, "%d", value);
+            oled_display_text(&oled, 1, "Lux is: " , false);
+            oled_display_text(&oled, 2, "              " , false);
+            oled_display_text(&oled, 2, data , false);
+            oled_display_text(&oled, 3, "            " , false);
+
+            sendData(mqtt, value);
            
+        }else{
+            oled_display_text(&oled, 3, "No conected" , false);
         }
+        
         delayms(1000);
     }
     
