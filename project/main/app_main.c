@@ -89,7 +89,7 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "v1.2"
+#define FIRMWARE_VERSION "v2.0"
 /*! Body of the request of specified shared attributes */
 #define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"targetFwUrl,targetFwVer\"}"
 
@@ -448,6 +448,8 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK)
         {
+            oled_display_text(&oled, 7, "Update completed", false);
+            delayms(2000);
             esp_restart();
         }
         else
@@ -507,6 +509,8 @@ void ota_task(void *pvParameter)
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
+                 oled_display_text(&oled, 7, "Send version", false);
+               
                 // Send the current firmware version to ThingsBoard
                 cJSON *current_fw = cJSON_CreateObject();
                 cJSON_AddStringToObject(current_fw, TB_CLIENT_ATTR_FIELD_CURRENT_FW, FIRMWARE_VERSION);
@@ -630,7 +634,7 @@ void app_main(void)
     oled._reset = CONFIG_RESET_GPIO;
     initOled(&oled);
     oled_clear_screen(&oled, false);
-    oled_display_text(&oled, 7, "     v1.0.0", false);
+    oled_display_text(&oled, 7,FIRMWARE_VERSION, false);
     oled_display_text(&oled, 3, "Wait wifi...", false);
     initMqtt();
 
