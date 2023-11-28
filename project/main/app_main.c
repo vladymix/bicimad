@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -46,52 +47,10 @@
 
 #include <sys/socket.h>
 
-/**
- * @brief Bit set for application events
- */
-#define WIFI_CONNECTED_EVENT BIT0
-#define WIFI_DISCONNECTED_EVENT BIT1
-#define MQTT_CONNECTED_EVENT BIT2
-#define MQTT_DISCONNECTED_EVENT BIT3
-#define OTA_CONFIG_FETCHED_EVENT BIT4
-#define OTA_CONFIG_UPDATED_EVENT BIT5
-#define OTA_TASK_IN_NORMAL_STATE_EVENT BIT6
-
-/*! Client attribute key to send the firmware version value to ThingsBoard */
-#define TB_CLIENT_ATTR_FIELD_CURRENT_FW "currentFwVer"
-/**
- * @brief  MQTT topic to request the specified shared attributes from ThingsBoard.
- *         44332 is a request id, any integer number can be used.
- */
-#define TB_ATTRIBUTES_REQUEST_TOPIC "v1/devices/me/attributes/request/44332"
-
-/**
- * @brief  MQTT topic to receive the requested specified shared attributes from ThingsBoard.
- *         44332 is a request id, have to be the same as used for the request.
- */
-#define TB_ATTRIBUTES_RESPONSE_TOPIC "v1/devices/me/attributes/response/44332"
-
-#define TB_SHARED_ATTR_FIELD_TARGET_FW_URL "targetFwUrl"
-#define TB_SHARED_ATTR_FIELD_TARGET_FW_VER "targetFwVer"
-#define TB_ATTRIBUTES_TOPIC "v1/devices/me/attributes"
-
-/*! MQTT topic to subscribe for the receiving of the specified shared attribute after the request to ThingsBoard */
-#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/+"
-
-#define HASH_LEN 32
-
 /******** OLED ************/
 #define CONFIG_SCL_GPIO 19 // SCK
 #define CONFIG_SDA_GPIO 21
 #define CONFIG_RESET_GPIO -1 // no contains reset pin display
-
-extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
-extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
-
-/*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "v2.0"
-/*! Body of the request of specified shared attributes */
-#define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"targetFwUrl,targetFwVer\"}"
 
 /**
  * @brief Set of states for @ref ota_task(void)
@@ -112,9 +71,9 @@ enum state
 
 /*! Buffer to save a received MQTT message */
 static char mqtt_msg[512];
+
 /*! Saves bit values used in application */
 static EventGroupHandle_t event_group;
-
 static const char *TAG = "mqtt_example";
 AnalogicDevice lux;
 esp_mqtt_client_handle_t mqtt = NULL;
@@ -132,7 +91,6 @@ static struct shared_keys
     char targetFwServerUrl[256];
     char targetFwVer[128];
 } shared_attributes;
-
 
 static bool fw_versions_are_equal(const char *current_ver, const char *target_ver)
 {
@@ -284,7 +242,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         if (event->data_len >= (sizeof(mqtt_msg) - 1))
         {
             ESP_LOGE(TAG, "Received MQTT message size [%d] more than expected [%d]", event->data_len, (sizeof(mqtt_msg) - 1));
-          break;
+            break;
         }
 
         if (strcmp(TB_ATTRIBUTES_RESPONSE_TOPIC, event->topic) == 0)
@@ -398,34 +356,33 @@ static void initMqtt(void)
     mqtt_app_start();
 }
 
-esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+esp_err_t _ota_http_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id)
     {
     case HTTP_EVENT_ERROR:
-        ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_ERROR");
         break;
     case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
-        notify_wifi_connected();
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_ON_CONNECTED");
         break;
     case HTTP_EVENT_HEADER_SENT:
-        ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_HEADER_SENT");
         break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         break;
     case HTTP_EVENT_ON_DATA:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
         break;
     case HTTP_EVENT_ON_FINISH:
-        ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_DISCONNECTED");
         break;
     case HTTP_EVENT_REDIRECT:
-        ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+        ESP_LOGD(TAG, "OTA HTTP_EVENT_REDIRECT");
         break;
     }
     return ESP_OK;
@@ -443,7 +400,7 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
         esp_http_client_config_t config = {
             .url = ota_config.targetFwServerUrl,
             .cert_pem = (char *)server_cert_pem_start,
-            .event_handler = _http_event_handler,
+            .event_handler = _ota_http_event_handler,
         };
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK)
@@ -481,10 +438,10 @@ void ota_task(void *pvParameter)
                 // OTA app partition table has a smaller NVS partition size than the non-OTA
                 // partition table. This size mismatch may cause NVS initialization to fail.
                 // If this happens, we erase NVS partition and initialize NVS again.
-               //TODO APP_ABORT_ON_ERROR(nvs_flash_erase());
+                // TODO APP_ABORT_ON_ERROR(nvs_flash_erase());
                 err = nvs_flash_init();
             }
-            //TODO APP_ABORT_ON_ERROR(err);
+            // TODO APP_ABORT_ON_ERROR(err);
 
             const esp_partition_t *running_partition = esp_ota_get_running_partition();
             strncpy(running_partition_label, running_partition->label, sizeof(running_partition_label));
@@ -509,8 +466,8 @@ void ota_task(void *pvParameter)
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
-                 oled_display_text(&oled, 7, "Send version", false);
-               
+                oled_display_text(&oled, 7, "Send version", false);
+
                 // Send the current firmware version to ThingsBoard
                 cJSON *current_fw = cJSON_CreateObject();
                 cJSON_AddStringToObject(current_fw, TB_CLIENT_ATTR_FIELD_CURRENT_FW, FIRMWARE_VERSION);
@@ -619,27 +576,8 @@ void ota_task(void *pvParameter)
     }
 }
 
-void app_main(void)
+void app_task(void *pvParamerer)
 {
-    event_group = xEventGroupCreate();
-   //get_sha256_of_partitions();
-
-    lux.channel = ADC1_CHANNEL_4;
-    lux.adc_atten = ADC_ATTEN_DB_11;
-    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
-    initAdc1(&lux);
-
-    oled._sda = CONFIG_SDA_GPIO;
-    oled._slc = CONFIG_SCL_GPIO;
-    oled._reset = CONFIG_RESET_GPIO;
-    initOled(&oled);
-    oled_clear_screen(&oled, false);
-    oled_display_text(&oled, 7,FIRMWARE_VERSION, false);
-    oled_display_text(&oled, 3, "Wait wifi...", false);
-    initMqtt();
-
-    xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
-
     while (1)
     {
         if (mqtt)
@@ -653,7 +591,6 @@ void app_main(void)
             oled_display_text(&oled, 2, "              ", false);
             oled_display_text(&oled, 2, data, false);
             oled_display_text(&oled, 3, "             ", false);
-
             sendData(mqtt, value);
         }
         else
@@ -664,4 +601,28 @@ void app_main(void)
 
         delayms(1000);
     }
+}
+
+void app_main(void)
+{
+    event_group = xEventGroupCreate();
+    // get_sha256_of_partitions();
+
+    lux.channel = ADC1_CHANNEL_4;
+    lux.adc_atten = ADC_ATTEN_DB_11;
+    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
+    initAdc1(&lux);
+
+    oled._sda = CONFIG_SDA_GPIO;
+    oled._slc = CONFIG_SCL_GPIO;
+    oled._reset = CONFIG_RESET_GPIO;
+    initOled(&oled);
+    oled_clear_screen(&oled, false);
+    oled_display_text(&oled, 7, FIRMWARE_VERSION, false);
+    oled_display_text(&oled, 3, "Wait wifi...", false);
+
+    initMqtt();
+
+    xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
+    xTaskCreate(&app_task, "app_task", 8192, NULL, 5, NULL);
 }

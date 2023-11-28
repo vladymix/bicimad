@@ -49,10 +49,6 @@ void chronometer(int ms, char* text);
 
 #define CONFIG_OFFSETX 0
 
-
-#ifndef MAIN_FONT8X8_BASIC_H_
-#define MAIN_FONT8X8_BASIC_H_
-
 static uint8_t font8x8_basic_tr[128][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },   // U+0000 (nul)
     { 0x00, 0x04, 0x02, 0xFF, 0x02, 0x04, 0x00, 0x00 },   // U+0001 (Up Allow)
@@ -184,9 +180,6 @@ static uint8_t font8x8_basic_tr[128][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }    // U+007F
 };
 
-#endif /* MAIN_FONT8X8_BASIC_H_ */
-
-
 typedef struct {
 	bool _valid; // Not using it anymore
 	int _segLen; // Not using it anymore
@@ -298,6 +291,55 @@ int readAdc2Value(AnalogicDevice* device);
 void initAdc1(AnalogicDevice* device);
 
 int readAdc1Value(AnalogicDevice* device);
+
+//********* OTA ********
+
+
+/**
+ * @brief Bit set for application events
+ */
+#define WIFI_CONNECTED_EVENT BIT0
+#define WIFI_DISCONNECTED_EVENT BIT1
+#define MQTT_CONNECTED_EVENT BIT2
+#define MQTT_DISCONNECTED_EVENT BIT3
+#define OTA_CONFIG_FETCHED_EVENT BIT4
+#define OTA_CONFIG_UPDATED_EVENT BIT5
+#define OTA_TASK_IN_NORMAL_STATE_EVENT BIT6
+
+/*! Client attribute key to send the firmware version value to ThingsBoard */
+#define TB_CLIENT_ATTR_FIELD_CURRENT_FW "currentFwVer"
+/**
+ * @brief  MQTT topic to request the specified shared attributes from ThingsBoard.
+ *         44332 is a request id, any integer number can be used.
+ */
+#define TB_ATTRIBUTES_REQUEST_TOPIC "v1/devices/me/attributes/request/44332"
+
+/**
+ * @brief  MQTT topic to receive the requested specified shared attributes from ThingsBoard.
+ *         44332 is a request id, have to be the same as used for the request.
+ */
+#define TB_ATTRIBUTES_RESPONSE_TOPIC "v1/devices/me/attributes/response/44332"
+
+#define TB_SHARED_ATTR_FIELD_TARGET_FW_URL "targetFwUrl"
+#define TB_SHARED_ATTR_FIELD_TARGET_FW_VER "targetFwVer"
+#define TB_ATTRIBUTES_TOPIC "v1/devices/me/attributes"
+
+/*! MQTT topic to subscribe for the receiving of the specified shared attribute after the request to ThingsBoard */
+#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/+"
+
+#define HASH_LEN 32
+
+
+
+extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
+extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
+
+/*! Firmware version used for comparison after OTA config was received from ThingsBoard */
+#define FIRMWARE_VERSION "v2.0"
+/*! Body of the request of specified shared attributes */
+#define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"targetFwUrl,targetFwVer\"}"
+
+//***********+ END OTA
 
 
 
