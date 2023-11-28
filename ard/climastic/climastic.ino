@@ -32,7 +32,7 @@ void loop() {
      Serial.println("Ready Gyroscope");
   
     float temperature = thing.get_temperature();
-    thing.get_acceleration()
+    thing.get_acceleration();
     Serial.println(temperature);
 
 
