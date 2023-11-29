@@ -13,16 +13,18 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <esp_event_loop.h>
+#include <esp_event.h>
 #include "esp_wifi.h"
 #include "esp_system.h"
-#include "esp_event.h"
+// #include "esp_event.h"
 #include "esp_netif.h"
-#include "protocol_examples_common.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
+#include "freertos/event_groups.h"
 
 #include "esp_log.h"
 #include "mqtt_client.h"
@@ -52,11 +54,18 @@
 #define CONFIG_SDA_GPIO 21
 #define CONFIG_RESET_GPIO -1 // no contains reset pin display
 
+/* FreeRTOS event group to signal when we are connected*/
+static EventGroupHandle_t s_wifi_event_group;
+
+#define WIFI_CONNECTED_BIT BIT0
+#define WIFI_FAIL_BIT      BIT1
+
 /**
  * @brief Set of states for @ref ota_task(void)
  */
 enum state
 {
+    STATE_RETRY_CONECTED,
     STATE_INITIAL,
     STATE_WAIT_WIFI,
     STATE_WIFI_CONNECTED,
@@ -74,7 +83,7 @@ static char mqtt_msg[512];
 
 /*! Saves bit values used in application */
 static EventGroupHandle_t event_group;
-static const char *TAG = "mqtt_example";
+static const char *TAG = "App Main";
 AnalogicDevice lux;
 esp_mqtt_client_handle_t mqtt = NULL;
 OLed oled;
@@ -91,6 +100,142 @@ static struct shared_keys
     char targetFwServerUrl[256];
     char targetFwVer[128];
 } shared_attributes;
+
+/*! Factory partiton label */
+#define FACTORY_PARTITION_LABEL "factory"
+#define EXAMPLE_ESP_MAXIMUM_RETRY  5
+
+uint8_t esp32_mac[6];
+
+static int s_retry_num = 0;
+
+void notify_wifi_connected()
+{
+    xEventGroupClearBits(event_group, WIFI_DISCONNECTED_EVENT);
+    xEventGroupSetBits(event_group, WIFI_CONNECTED_EVENT);
+}
+
+void notify_wifi_disconnected()
+{
+    xEventGroupClearBits(event_group, WIFI_CONNECTED_EVENT);
+    xEventGroupSetBits(event_group, WIFI_DISCONNECTED_EVENT);
+}
+
+static void event_handler(void* arg, esp_event_base_t event_base,
+                                int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY) {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "retry to connect to the AP");
+        } else {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            notify_wifi_connected();
+        }
+        ESP_LOGI(TAG,"connect to the AP fail");
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
+void wifi_init_sta(const char *running_partition_label)
+{
+    assert(running_partition_label != NULL);
+
+     s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    APP_ABORT_ON_ERROR(esp_wifi_init(&cfg));
+    APP_ABORT_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_FLASH));
+
+    wifi_config_t wifi_config = {};
+    APP_ABORT_ON_ERROR(esp_wifi_get_config(ESP_IF_WIFI_STA, &wifi_config));
+
+  /*  if (wifi_config.sta.ssid[0] == '\0' || wifi_config.sta.password[0] == '\0')
+    {
+        ESP_LOGW(TAG, "Flash memory doesn't contain any Wi-Fi credentials");
+        if (strcmp(FACTORY_PARTITION_LABEL, running_partition_label) == 0)
+        {
+            ESP_LOGW(TAG, "Factory partition is running, Wi-Fi credentials from config are used and will be saved to the flash memory");
+            wifi_sta_config_t wifi_sta_config = {
+                .ssid = CONFIG_EXAMPLE_WIFI_SSID,
+                .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
+            };
+
+            wifi_config.sta = wifi_sta_config;
+        }
+        else
+        {
+            ESP_LOGE(TAG, "Wi-Fi credentials were not found, running partition is not '%s'", FACTORY_PARTITION_LABEL);
+            APP_ABORT_ON_ERROR(ESP_FAIL);
+        }
+    }
+    else
+    {
+        ESP_LOGI(TAG, "Wi-Fi credentials from flash memory: %s, %s", wifi_config.sta.ssid, wifi_config.sta.password);
+    }*/
+
+     wifi_sta_config_t wifi_sta_config = {
+                .ssid = CONFIG_EXAMPLE_WIFI_SSID,
+                .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
+            };
+
+            wifi_config.sta = wifi_sta_config;
+
+    esp_event_handler_instance_t instance_any_id;
+    esp_event_handler_instance_t instance_got_ip;
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_any_id));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &event_handler,
+                                                        NULL,
+                                                        &instance_got_ip));
+
+
+
+    APP_ABORT_ON_ERROR(esp_wifi_get_mac(ESP_IF_WIFI_STA, esp32_mac))
+    ESP_LOGI(TAG, "MAC address: %02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
+    APP_ABORT_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA));
+
+    APP_ABORT_ON_ERROR(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
+    APP_ABORT_ON_ERROR(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
+     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
+    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
+            WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+            pdFALSE,
+            pdFALSE,
+            portMAX_DELAY);
+
+    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
+     * happened. */
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "connected to WIFI");
+        notify_wifi_connected();
+    } else if (bits & WIFI_FAIL_BIT) {
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", CONFIG_EXAMPLE_WIFI_SSID, CONFIG_EXAMPLE_WIFI_PASSWORD);
+        notify_wifi_disconnected();
+    } else {
+        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    }
+}
 
 static bool fw_versions_are_equal(const char *current_ver, const char *target_ver)
 {
@@ -167,6 +312,9 @@ static void sendData(esp_mqtt_client_handle_t client, int value)
     // Crear json que se quiere enviar al ThingsBoard
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "lux", value);
+    cJSON_AddNumberToObject(root, "humidity", value);
+    cJSON_AddNumberToObject(root, "temperature", value);
+    cJSON_AddNumberToObject(root, "gas", 0);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
     // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
 
@@ -176,12 +324,6 @@ static void sendData(esp_mqtt_client_handle_t client, int value)
     // v1/  devices / me / telemetry sale de la MQTT Device API Reference de ThingsBoard cJSON_Delete(root);
     // Free is intentional, it's client responsibility to free the result of cJSON_Print
     free(post_data);
-}
-
-void notify_wifi_connected()
-{
-    xEventGroupClearBits(event_group, WIFI_DISCONNECTED_EVENT);
-    xEventGroupSetBits(event_group, WIFI_CONNECTED_EVENT);
 }
 
 static void log_error_if_nonzero(const char *message, int error_code)
@@ -201,7 +343,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     switch ((esp_mqtt_event_id_t)event_id)
     {
     case MQTT_EVENT_CONNECTED:
-        xEventGroupClearBits(event_group, MQTT_DISCONNECTED_EVENT);
+       xEventGroupClearBits(event_group, MQTT_DISCONNECTED_EVENT);
         xEventGroupSetBits(event_group, MQTT_CONNECTED_EVENT);
 
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
@@ -220,10 +362,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         mqtt = client;
         break;
     case MQTT_EVENT_DISCONNECTED:
-        xEventGroupClearBits(event_group, MQTT_CONNECTED_EVENT);
-        xEventGroupSetBits(event_group, MQTT_DISCONNECTED_EVENT);
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
         mqtt = NULL;
+        xEventGroupClearBits(event_group, MQTT_CONNECTED_EVENT);
+        xEventGroupSetBits(event_group, MQTT_DISCONNECTED_EVENT);
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -238,7 +380,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
         break;
     case MQTT_EVENT_DATA:
-        ESP_LOGD(TAG, "MQTT_EVENT_DATA, msg_id=%d, %s", event->msg_id, event->topic);
+        ESP_LOGE(TAG, "MQTT_EVENT_DATA, msg_id=%d, %s", event->msg_id, event->topic);
         if (event->data_len >= (sizeof(mqtt_msg) - 1))
         {
             ESP_LOGE(TAG, "Received MQTT message size [%d] more than expected [%d]", event->data_len, (sizeof(mqtt_msg) - 1));
@@ -249,6 +391,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         {
             memcpy(mqtt_msg, event->data, event->data_len);
             mqtt_msg[event->data_len] = 0;
+             ESP_LOGE(TAG, " DATA if mqtt_msg: %s", mqtt_msg);
             cJSON *attributes = cJSON_Parse(mqtt_msg);
             if (attributes != NULL)
             {
@@ -266,6 +409,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         else if (strcmp(TB_ATTRIBUTES_TOPIC, event->topic) == 0)
         {
             memcpy(mqtt_msg, event->data, MIN(event->data_len, sizeof(mqtt_msg)));
+            ESP_LOGE(TAG, " DATA else mqtt_msg: %s", mqtt_msg);
             mqtt_msg[event->data_len] = 0;
             cJSON *attributes = cJSON_Parse(mqtt_msg);
             parse_ota_config(attributes);
@@ -312,23 +456,6 @@ static void print_sha256(const uint8_t *image_hash, const char *label)
     ESP_LOGI(TAG, "%s %s", label, hash_print);
 }
 
-static void get_sha256_of_partitions(void)
-{
-    uint8_t sha_256[HASH_LEN] = {0};
-    esp_partition_t partition;
-
-    // get sha256 digest for bootloader
-    partition.address = ESP_BOOTLOADER_OFFSET;
-    partition.size = ESP_PARTITION_TABLE_OFFSET;
-    partition.type = ESP_PARTITION_TYPE_APP;
-    esp_partition_get_sha256(&partition, sha_256);
-    print_sha256(sha_256, "SHA-256 for bootloader: ");
-
-    // get sha256 digest for running partition
-    esp_partition_get_sha256(esp_ota_get_running_partition(), sha_256);
-    print_sha256(sha_256, "SHA-256 for current firmware: ");
-}
-
 static void initMqtt(void)
 {
     ESP_LOGI(TAG, "[APP] Startup..");
@@ -342,16 +469,6 @@ static void initMqtt(void)
     esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
     esp_log_level_set("transport", ESP_LOG_VERBOSE);
     esp_log_level_set("outbox", ESP_LOG_VERBOSE);
-
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
-     * Read "Establishing Wi-Fi or Ethernet Connection" section in
-     * examples/protocols/README.md for more information about this function.
-     */
-    ESP_ERROR_CHECK(example_connect());
 
     mqtt_app_start();
 }
@@ -426,9 +543,28 @@ void ota_task(void *pvParameter)
 
     while (1)
     {
+          if (state != STATE_INITIAL && state != STATE_APP_LOOP)
+        {
+            if (state != STATE_APP_LOOP)
+            {
+                xEventGroupClearBits(event_group, OTA_TASK_IN_NORMAL_STATE_EVENT);
+            }
+
+            actual_event = xEventGroupWaitBits(event_group,
+                                               WIFI_CONNECTED_EVENT 
+                                               | WIFI_DISCONNECTED_EVENT 
+                                               | MQTT_CONNECTED_EVENT 
+                                               | MQTT_DISCONNECTED_EVENT 
+                                               | OTA_CONFIG_FETCHED_EVENT,
+                                               false, false, portMAX_DELAY);
+        }
 
         switch (state)
         {
+        case STATE_RETRY_CONECTED:{
+         ESP_LOGE(TAG, "Retry conect");
+              //state = STATE_INITIAL;
+        }
         case STATE_INITIAL:
         {
             // Initialize NVS.
@@ -446,13 +582,35 @@ void ota_task(void *pvParameter)
             const esp_partition_t *running_partition = esp_ota_get_running_partition();
             strncpy(running_partition_label, running_partition->label, sizeof(running_partition_label));
             ESP_LOGI(TAG, "Running partition: %s", running_partition_label);
+
+            wifi_init_sta(running_partition);
             state = STATE_WAIT_WIFI;
+            oled_display_text(&oled, 3, "Wait wifi...", false);
             break;
         }
         case STATE_WAIT_WIFI:
         {
-            state = STATE_WAIT_MQTT;
-            actual_event = WIFI_CONNECTED_EVENT;
+            // state = STATE_WAIT_MQTT;
+            // actual_event = WIFI_CONNECTED_EVENT;
+            if (actual_event & WIFI_DISCONNECTED_EVENT)
+            {
+                ESP_LOGW(TAG, "WAIT_WIFI state, Wi-Fi not connected, wait for the connect");
+                state = STATE_WAIT_WIFI;
+                break;
+            }
+
+            if (actual_event & WIFI_CONNECTED_EVENT)
+            {
+             oled_display_text(&oled, 3, "Init mqtt...", false);
+             ESP_LOGD(TAG, "********  Init MQTT *************");
+               initMqtt();
+                // TODO  mqtt_app_start(running_partition_label);
+                state = STATE_WAIT_MQTT;
+                break;
+            }
+
+            ESP_LOGE(TAG, "WAIT_WIFI state, unexpected event received: %d", actual_event);
+            state = STATE_INITIAL;
             break;
         }
         case STATE_WAIT_MQTT:
@@ -460,6 +618,7 @@ void ota_task(void *pvParameter)
             current_connection_state = connection_state(actual_event, "WAIT_MQTT");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
+                oled_display_text(&oled, 7, "Wait Mqtt", false);
                 state = current_connection_state;
                 break;
             }
@@ -467,6 +626,7 @@ void ota_task(void *pvParameter)
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
                 oled_display_text(&oled, 7, "Send version", false);
+                ESP_LOGI(TAG, "Send current version");
 
                 // Send the current firmware version to ThingsBoard
                 cJSON *current_fw = cJSON_CreateObject();
@@ -522,13 +682,16 @@ void ota_task(void *pvParameter)
             current_connection_state = connection_state(actual_event, "OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
+                ESP_LOGE(TAG, "WAIT STATE_OTA_CONFIG_FETCHED actual event%d", actual_event);
                 state = current_connection_state;
                 break;
             }
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
+                ESP_LOGE(TAG, "WAIT WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT actual event%d", actual_event);
                 start_ota(FIRMWARE_VERSION, shared_attributes);
+                 ESP_LOGE(TAG, "Parsed data actual event%d", actual_event);
                 esp_mqtt_client_subscribe(mqtt, TB_ATTRIBUTES_TOPIC, 1);
                 ESP_LOGI(TAG, "Subscribed to shared attributes updates");
                 state = STATE_APP_LOOP;
@@ -593,11 +756,6 @@ void app_task(void *pvParamerer)
             oled_display_text(&oled, 3, "             ", false);
             sendData(mqtt, value);
         }
-        else
-        {
-            oled_clear_screen(&oled, false);
-            oled_display_text(&oled, 3, "No conected", false);
-        }
 
         delayms(1000);
     }
@@ -605,8 +763,6 @@ void app_task(void *pvParamerer)
 
 void app_main(void)
 {
-    event_group = xEventGroupCreate();
-    // get_sha256_of_partitions();
 
     lux.channel = ADC1_CHANNEL_4;
     lux.adc_atten = ADC_ATTEN_DB_11;
@@ -619,10 +775,8 @@ void app_main(void)
     initOled(&oled);
     oled_clear_screen(&oled, false);
     oled_display_text(&oled, 7, FIRMWARE_VERSION, false);
-    oled_display_text(&oled, 3, "Wait wifi...", false);
-
-    initMqtt();
-
+    
+    event_group = xEventGroupCreate();
     xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
     xTaskCreate(&app_task, "app_task", 8192, NULL, 5, NULL);
 }

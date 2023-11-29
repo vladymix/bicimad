@@ -335,11 +335,22 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "v2.0"
+#define FIRMWARE_VERSION "v3.0"
 /*! Body of the request of specified shared attributes */
 #define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"targetFwUrl,targetFwVer\"}"
 
 //***********+ END OTA
+
+#define APP_ABORT_ON_ERROR(x)                                     \
+    do                                                            \
+    {                                                             \
+        esp_err_t __err_rc = (x);                                 \
+        if (__err_rc != ESP_OK)                                   \
+        {                                                         \
+            _esp_error_check_failed(__err_rc, __FILE__, __LINE__, \
+                                    __ASSERT_FUNC, #x);           \
+        }                                                         \
+    } while (0);
 
 
 
