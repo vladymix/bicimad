@@ -307,7 +307,7 @@ int readAdc1Value(AnalogicDevice* device);
 #define OTA_TASK_IN_NORMAL_STATE_EVENT BIT6
 
 /*! Client attribute key to send the firmware version value to ThingsBoard */
-#define TB_CLIENT_ATTR_FIELD_CURRENT_FW "currentFwVer"
+#define TB_CLIENT_ATTR_FIELD_CURRENT_FW "current_fw_version"
 /**
  * @brief  MQTT topic to request the specified shared attributes from ThingsBoard.
  *         44332 is a request id, any integer number can be used.
@@ -320,12 +320,12 @@ int readAdc1Value(AnalogicDevice* device);
  */
 #define TB_ATTRIBUTES_RESPONSE_TOPIC "v1/devices/me/attributes/response/44332"
 
-#define TB_SHARED_ATTR_FIELD_TARGET_FW_URL "targetFwUrl"
-#define TB_SHARED_ATTR_FIELD_TARGET_FW_VER "targetFwVer"
+#define TB_SHARED_ATTR_FIELD_TARGET_FW_URL "fw_url"
+#define TB_SHARED_ATTR_FIELD_TARGET_FW_VER "fw_version"
 #define TB_ATTRIBUTES_TOPIC "v1/devices/me/attributes"
 
 /*! MQTT topic to subscribe for the receiving of the specified shared attribute after the request to ThingsBoard */
-#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/+"
+#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/"
 
 #define HASH_LEN 32
 
@@ -335,9 +335,9 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "v3.0"
+#define FIRMWARE_VERSION "5.1"
 /*! Body of the request of specified shared attributes */
-#define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"targetFwUrl,targetFwVer\"}"
+#define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"fw_version,fw_url\"}"
 
 //***********+ END OTA
 
