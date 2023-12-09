@@ -100,8 +100,6 @@ void chronometer(int ms, char* text)
    // sprintf(text, "%d", ms);
 }
 
-
-
 void i2c_contrast(OLed *dev, int contrast)
 {
     i2c_cmd_handle_t cmd;
@@ -498,3 +496,4 @@ int readAdc1Value(AnalogicDevice* device){
     int val = adc1_get_raw(device->channel);
     return val;
 }
+

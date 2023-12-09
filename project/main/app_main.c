@@ -855,10 +855,6 @@ static void button_handler_task(void *arg)
         StateTouch lastState;
         lastState = button.status;
         int level = gpio_get_level(button.gpio);
-    
-        ESP_LOGW("Button", "button  lastState%d\n", lastState);
-        ESP_LOGW("Button", "button_handler %d\n", level);
-
         if (level == 1)
         {
             button.status = BUTTON_STATE_TOUCH;
@@ -871,7 +867,7 @@ static void button_handler_task(void *arg)
         if (lastState == BUTTON_STATE_TOUCH && button.status == BUTTON_STATE_RELEASE)
         {
 
-           button_handler(button);
+            button_handler(button);
         }
         /* code */
         delayms(button.sensitivity);
@@ -881,19 +877,13 @@ static void button_handler_task(void *arg)
 void initButton(TouchButton *button)
 {
     button->status = BUTTON_STATE_RELEASE;
-    button->time =0;
+    button->time = 0;
     gpio_reset_pin(button->gpio);
     gpio_set_direction(button->gpio, GPIO_MODE_INPUT);
 }
 
 void app_main(void)
 {
-
-    lux.channel = ADC1_CHANNEL_4;
-    lux.adc_atten = ADC_ATTEN_DB_11;
-    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
-    initAdc1(&lux);
-
     oled._sda = CONFIG_SDA_GPIO;
     oled._slc = CONFIG_SCL_GPIO;
     oled._reset = CONFIG_RESET_GPIO;
@@ -901,7 +891,12 @@ void app_main(void)
     oled_clear_screen(&oled, false);
     logOlded(FIRMWARE_VERSION);
 
-     // Initialize touch
+    lux.channel = ADC1_CHANNEL_4;
+    lux.adc_atten = ADC_ATTEN_DB_11;
+    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
+    initAdc1(&lux);
+
+    // Initialize touch
     button.gpio = GPIO_NUM_21;
     button.sensitivity = 100;
     initButton(&button);
