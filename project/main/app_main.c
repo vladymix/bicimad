@@ -89,8 +89,7 @@ AnalogicDevice lux;
 esp_mqtt_client_handle_t mqtt = NULL;
 OLed oled;
 TouchButton button;
-
-int displayMode = DISPLAY_LUX;
+Sensor sensor;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
 //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
@@ -286,6 +285,7 @@ static bool ota_params_are_specified(struct shared_keys ota_config)
 
     return true;
 }
+
 static void logOlded(const char *log)
 {
     // Clear
@@ -335,13 +335,13 @@ static void parse_ota_config(const cJSON *object)
     }
 }
 
-static void sendData(esp_mqtt_client_handle_t client, int value)
+static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
 {
     // Crear json que se quiere enviar al ThingsBoard
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "lux", value);
-    cJSON_AddNumberToObject(root, "humidity", value);
-    cJSON_AddNumberToObject(root, "temperature", value);
+    cJSON_AddNumberToObject(root, "lux", sensor.lux);
+    cJSON_AddNumberToObject(root, "humidity", sensor.humidity);
+    cJSON_AddNumberToObject(root, "temperature", sensor.temperature);
     cJSON_AddNumberToObject(root, "gas", 0);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
     // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
@@ -565,6 +565,59 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
     }
 }
 
+void readLux()
+{
+    sensor.lux = readAdc1Value(&lux);
+    ESP_LOGW(TAG, "Read value Lux %d.\n", sensor.lux);
+}
+
+void displayData()
+{
+    oled_display_clear(&oled, 1);
+    oled_display_clear(&oled, 2);
+    switch (sensor.mode)
+    {
+    case DISPLAY_LUX:
+        char data[14];
+        sprintf(data, "%d", sensor.lux);
+        oled_display_text(&oled, 1, "Lux is: ", false);
+        oled_display_text(&oled, 2, data, false);
+        break;
+    case DISPLAY_HUMIDITY:
+        /* code */
+        oled_display_text(&oled, 1, "Humidity is: ", false);
+        oled_display_text(&oled, 2, "No implemented", false);
+        break;
+
+    case DISPLAY_TEMPERATURE:
+        /* code */
+        oled_display_text(&oled, 1, "Temperature is: ", false);
+        oled_display_text(&oled, 2, "No implemented", false);
+        break;
+
+    default:
+        break;
+    }
+
+    // oled_display_text(&oled, 4, "Updated to", false);
+    oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
+}
+void logicSensor()
+{
+    if (mqtt)
+    {
+        readLux();
+        displayData();
+        sendData(mqtt, sensor);
+        logOlded("Reading sensors");
+    }
+    else
+    {
+        logOlded("MQTT NO ENABLED");
+        oled_display_text(&oled, 7, "MQTT NO ENABLE", false);
+    }
+}
+
 void ota_task(void *pvParameter)
 {
     enum state current_connection_state = STATE_CONNECTION_IS_OK;
@@ -597,7 +650,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_INITIAL:
         {
-            logOlded("STATE_INITIAL");
+            logOlded("Initializing");
             // Initialize NVS.
             esp_err_t err = nvs_flash_init();
             if (err == ESP_ERR_NVS_NO_FREE_PAGES)
@@ -621,7 +674,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_WIFI:
         {
-            logOlded("STATE_WAIT_WIFI");
+            logOlded("wait wifi");
             // state = STATE_WAIT_MQTT;
             // actual_event = WIFI_CONNECTED_EVENT;
             if (actual_event & WIFI_DISCONNECTED_EVENT)
@@ -646,7 +699,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_MQTT:
         {
-            logOlded("WAIT_MQTT");
+            logOlded("WAIT MQTT");
             current_connection_state = connection_state(actual_event, "WAIT_MQTT");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -683,7 +736,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_OTA_CONFIG_FETCHED:
         {
-            logOlded("OTA FETCHED");
+            logOlded("OTA Fetched");
             current_connection_state = connection_state(actual_event, "WAIT_OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -711,7 +764,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_OTA_CONFIG_FETCHED:
         {
-            logOlded("OTA CONFIG FETCHED");
+            logOlded("OTA Config fetched");
             current_connection_state = connection_state(actual_event, "OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -736,29 +789,8 @@ void ota_task(void *pvParameter)
         }
         case STATE_APP_LOOP:
         {
-            logOlded("APP_LOOP");
             current_connection_state = connection_state(actual_event, "APP_LOOP");
-
-            if (mqtt)
-            {
-                printf("Sending data\n");
-                int value = readAdc1Value(&lux);
-                printf("Read value Lux %d.\n", value);
-                char data[14];
-                sprintf(data, "%d", value);
-                oled_display_text(&oled, 1, "Lux is: ", false);
-                oled_display_text(&oled, 2, "              ", false);
-                oled_display_text(&oled, 2, data, false);
-                // oled_display_text(&oled, 4, "Updated to", false);
-                oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
-                sendData(mqtt, value);
-            }
-            else
-            {
-                printf("wait wifi");
-                oled_display_text(&oled, 7, "MQTT NO ENABLE", false);
-            }
-
+            logicSensor();
             delayms(1000);
 
             if (current_connection_state != STATE_CONNECTION_IS_OK)
@@ -796,56 +828,12 @@ void ota_task(void *pvParameter)
     }
 }
 
-void app_task(void *pvParamerer)
-{
-    while (1)
-    {
-        if (mqtt)
-        {
-            printf("Sending data\n");
-            int value = readAdc1Value(&lux);
-            printf("Read value Lux %d.\n", value);
-            char data[14];
-            sprintf(data, "%d", value);
-            oled_display_text(&oled, 1, "Lux is: ", false);
-            oled_display_text(&oled, 2, "              ", false);
-            oled_display_text(&oled, 2, data, false);
-            // oled_display_text(&oled, 4, "Updated to", false);
-            oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
-            sendData(mqtt, value);
-        }
-
-        delayms(1000);
-    }
-}
-
 static void button_handler(TouchButton button)
 {
-
-    displayMode++;
-    displayMode = displayMode % 3;
-    char *mode;
-    mode = "default";
-    switch (displayMode)
-    {
-    case DISPLAY_HUMIDITY:
-        mode = "Humedad";
-        /* code */
-        break;
-    case DISPLAY_TEMPERATURE:
-        mode = "Temperatura";
-        /* code */
-        break;
-    case DISPLAY_LUX:
-        mode = "Luz";
-        /* code */
-        break;
-    }
-
-    oled_display_text(&oled, 3, "Mode", false);
-    oled_display_clear(&oled, 4);
-    oled_display_text(&oled, 4, mode, false);
-    ESP_LOGE("Button", "button_handler %d\n", button.status);
+    sensor.mode++;
+    sensor.mode = sensor.mode % 3;
+    ESP_LOGE("Button", "button_handler status:%d mode:%d\n", button.status, sensor.mode);
+    displayData();
 }
 
 static void button_handler_task(void *arg)
@@ -884,6 +872,9 @@ void initButton(TouchButton *button)
 
 void app_main(void)
 {
+
+    sensor.mode = DISPLAY_LUX;
+
     oled._sda = CONFIG_SDA_GPIO;
     oled._slc = CONFIG_SCL_GPIO;
     oled._reset = CONFIG_RESET_GPIO;

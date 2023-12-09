@@ -371,3 +371,12 @@ typedef struct
     StateTouch status;
     int time;
 } TouchButton;
+
+typedef struct
+{
+   DisplayMode mode;
+   int lux;
+   int temperature;
+   int humidity;
+  
+} Sensor;
