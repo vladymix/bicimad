@@ -361,9 +361,12 @@ void oled_display_image(OLed *dev, int page, int seg, uint8_t *images, int width
 
 void oled_display_text(OLed *dev, int line, char *text, bool invert)
 {
-
     int size = strlen(text);
     oled_print_text(dev, line, text, size, invert);
+}
+
+void oled_display_clear(OLed *dev, int line){
+    oled_display_text(dev, line, "                ", false);
 }
 
 void oled_print_text(OLed *dev, int page, char *text, int text_len, bool invert)

@@ -213,6 +213,7 @@ void ssd1306_flip(uint8_t *buf, size_t blen);
 void ssd1306_invert(uint8_t *buf, size_t blen);
 void ssd1306_show_buffer(OLed *dev);
 
+void oled_display_clear(OLed *dev, int line);
 void oled_display_image(OLed *dev, int page, int seg, uint8_t *images, int width);
 void oled_display_text(OLed *dev, int line, char *text, bool invert);
 void oled_print_text(OLed *dev, int page, char *text, int text_len, bool invert);
@@ -335,7 +336,7 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "5.1"
+#define FIRMWARE_VERSION "2.0"
 /*! Body of the request of specified shared attributes */
 #define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"fw_version,fw_url\"}"
 
@@ -352,5 +353,25 @@ extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
         }                                                         \
     } while (0);
 
+
+typedef enum {
+    BUTTON_STATE_TOUCH = 0,
+    BUTTON_STATE_RELEASE = 1
+} StateTouch;
+
+typedef enum {
+    DISPLAY_LUX,
+   DISPLAY_HUMIDITY,
+   DISPLAY_TEMPERATURE,
+} DisplayMode;
+
+typedef struct
+{
+    int gpio;
+    // Sensitivity response ms
+    int sensitivity;
+    StateTouch status;
+    int time;
+} TouchButton;
 
 

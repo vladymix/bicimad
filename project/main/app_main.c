@@ -50,8 +50,8 @@
 #include <sys/socket.h>
 
 /******** OLED ************/
-#define CONFIG_SCL_GPIO 19 // SCK
-#define CONFIG_SDA_GPIO 21
+#define CONFIG_SCL_GPIO 18 // SCK
+#define CONFIG_SDA_GPIO 19
 #define CONFIG_RESET_GPIO -1 // no contains reset pin display
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -74,7 +74,6 @@ enum state
     STATE_WAIT_OTA_CONFIG_FETCHED,
     STATE_OTA_CONFIG_FETCHED,
     STATE_APP_LOOP,
-
     STATE_CONNECTION_IS_OK
 };
 
@@ -84,16 +83,21 @@ static char mqtt_msg[512];
 /*! Saves bit values used in application */
 static EventGroupHandle_t event_group;
 static const char *TAG = "App Main";
+
+// DEVICES
 AnalogicDevice lux;
 esp_mqtt_client_handle_t mqtt = NULL;
 OLed oled;
+TouchButton button;
+
+int displayMode = DISPLAY_LUX;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
 //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
 esp_mqtt_client_config_t mqtt_cfg = {
-    .broker.address.uri = CONFIG_BROKER_URL,
+    .broker.address.uri = "mqtt://mqtt.thingsboard.cloud",
     .broker.address.port = 1883,
-    .credentials.client_id = "ckawzufasqcuwqy7i7gf"};
+    .credentials.client_id = "tkbgb5tmw13oivovd6q3"};
 
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
@@ -194,12 +198,12 @@ void wifi_init_sta(const char *running_partition_label)
           ESP_LOGI(TAG, "Wi-Fi credentials from flash memory: %s, %s", wifi_config.sta.ssid, wifi_config.sta.password);
       }*/
 
-   /* wifi_sta_config_t wifi_sta_config = {
-        .ssid = "CONFIG_EXAMPLE_WIFI_SSID",
-        .password = "CONFIG_EXAMPLE_WIFI_PASSWORD",
-    };*/
+    /* wifi_sta_config_t wifi_sta_config = {
+         .ssid = "CONFIG_EXAMPLE_WIFI_SSID",
+         .password = "CONFIG_EXAMPLE_WIFI_PASSWORD",
+     };*/
 
-        wifi_sta_config_t wifi_sta_config = {
+    wifi_sta_config_t wifi_sta_config = {
         .ssid = "SKYNET_2G",
         .password = "4cedjte6xegw",
     };
@@ -245,7 +249,7 @@ void wifi_init_sta(const char *running_partition_label)
     }
     else if (bits & WIFI_FAIL_BIT)
     {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", CONFIG_EXAMPLE_WIFI_SSID, CONFIG_EXAMPLE_WIFI_PASSWORD);
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", "CONFIG_EXAMPLE_WIFI_SSID", "CONFIG_EXAMPLE_WIFI_PASSWORD");
         notify_wifi_disconnected();
     }
     else
@@ -281,6 +285,13 @@ static bool ota_params_are_specified(struct shared_keys ota_config)
     }
 
     return true;
+}
+static void logOlded(const char *log)
+{
+    // Clear
+    oled_display_clear(&oled, 7);
+    // Print
+    oled_display_text(&oled, 7, log, false);
 }
 
 static enum state connection_state(BaseType_t actual_event, const char *current_state_name)
@@ -536,16 +547,20 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
             .cert_pem = (char *)server_cert_pem_start,
             .event_handler = _ota_http_event_handler,
         };
+        logOlded("Download...");
+
         esp_err_t ret = esp_https_ota(&config);
         if (ret == ESP_OK)
         {
-            oled_display_text(&oled, 7, "Update completed", false);
+            logOlded("Update completed");
             delayms(2000);
+            ESP_LOGW(TAG, "Firmware Updated");
             esp_restart();
         }
         else
         {
-            ESP_LOGE(TAG, "Firmware Upgrades Failed");
+            logOlded("Update ERROR");
+            ESP_LOGE(TAG, "Firmware  Updated Failed %d", ret);
         }
     }
 }
@@ -576,11 +591,13 @@ void ota_task(void *pvParameter)
         {
         case STATE_RETRY_CONECTED:
         {
+            logOlded("Retry conect");
             ESP_LOGE(TAG, "Retry conect");
             // state = STATE_INITIAL;
         }
         case STATE_INITIAL:
         {
+            logOlded("STATE_INITIAL");
             // Initialize NVS.
             esp_err_t err = nvs_flash_init();
             if (err == ESP_ERR_NVS_NO_FREE_PAGES)
@@ -599,11 +616,12 @@ void ota_task(void *pvParameter)
 
             wifi_init_sta(running_partition);
             state = STATE_WAIT_WIFI;
-            oled_display_text(&oled, 3, "Wait wifi...", false);
+
             break;
         }
         case STATE_WAIT_WIFI:
         {
+            logOlded("STATE_WAIT_WIFI");
             // state = STATE_WAIT_MQTT;
             // actual_event = WIFI_CONNECTED_EVENT;
             if (actual_event & WIFI_DISCONNECTED_EVENT)
@@ -615,7 +633,6 @@ void ota_task(void *pvParameter)
 
             if (actual_event & WIFI_CONNECTED_EVENT)
             {
-                oled_display_text(&oled, 3, "Init mqtt...", false);
                 ESP_LOGD(TAG, "********  Init MQTT *************");
                 initMqtt();
                 // TODO  mqtt_app_start(running_partition_label);
@@ -629,19 +646,19 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_MQTT:
         {
+            logOlded("WAIT_MQTT");
             current_connection_state = connection_state(actual_event, "WAIT_MQTT");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
-                oled_display_text(&oled, 7, "Wait Mqtt", false);
                 state = current_connection_state;
                 break;
             }
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
-                oled_display_text(&oled, 7, "Send version", false);
-                ESP_LOGI(TAG, "Send current version");
 
+                logOlded("Sending version");
+                ESP_LOGI(TAG, "Send current version %s", FIRMWARE_VERSION);
                 // Send the current firmware version to ThingsBoard
                 cJSON *current_fw = cJSON_CreateObject();
                 cJSON_AddStringToObject(current_fw, TB_CLIENT_ATTR_FIELD_CURRENT_FW, FIRMWARE_VERSION);
@@ -655,7 +672,7 @@ void ota_task(void *pvParameter)
                 esp_mqtt_client_subscribe(mqtt, TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC, 1);
                 esp_mqtt_client_publish(mqtt, TB_ATTRIBUTES_REQUEST_TOPIC, TB_SHARED_ATTR_KEYS_REQUEST, 0, 1, 0);
                 ESP_LOGI(TAG, "Waiting for shared attributes response");
-
+                logOlded("Waiting config");
                 state = STATE_WAIT_OTA_CONFIG_FETCHED;
                 break;
             }
@@ -666,6 +683,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_OTA_CONFIG_FETCHED:
         {
+            logOlded("OTA FETCHED");
             current_connection_state = connection_state(actual_event, "WAIT_OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -693,6 +711,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_OTA_CONFIG_FETCHED:
         {
+            logOlded("OTA CONFIG FETCHED");
             current_connection_state = connection_state(actual_event, "OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -717,7 +736,31 @@ void ota_task(void *pvParameter)
         }
         case STATE_APP_LOOP:
         {
+            logOlded("APP_LOOP");
             current_connection_state = connection_state(actual_event, "APP_LOOP");
+
+            if (mqtt)
+            {
+                printf("Sending data\n");
+                int value = readAdc1Value(&lux);
+                printf("Read value Lux %d.\n", value);
+                char data[14];
+                sprintf(data, "%d", value);
+                oled_display_text(&oled, 1, "Lux is: ", false);
+                oled_display_text(&oled, 2, "              ", false);
+                oled_display_text(&oled, 2, data, false);
+                // oled_display_text(&oled, 4, "Updated to", false);
+                oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
+                sendData(mqtt, value);
+            }
+            else
+            {
+                printf("wait wifi");
+                oled_display_text(&oled, 7, "MQTT NO ENABLE", false);
+            }
+
+            delayms(1000);
+
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
                 state = current_connection_state;
@@ -767,14 +810,80 @@ void app_task(void *pvParamerer)
             oled_display_text(&oled, 1, "Lux is: ", false);
             oled_display_text(&oled, 2, "              ", false);
             oled_display_text(&oled, 2, data, false);
-            oled_display_text(&oled, 3, "             ", false);
-           // oled_display_text(&oled, 4, "Updated to", false);
+            // oled_display_text(&oled, 4, "Updated to", false);
             oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
             sendData(mqtt, value);
         }
 
         delayms(1000);
     }
+}
+
+static void button_handler(TouchButton button)
+{
+
+    displayMode++;
+    displayMode = displayMode % 3;
+    char *mode;
+    mode = "default";
+    switch (displayMode)
+    {
+    case DISPLAY_HUMIDITY:
+        mode = "Humedad";
+        /* code */
+        break;
+    case DISPLAY_TEMPERATURE:
+        mode = "Temperatura";
+        /* code */
+        break;
+    case DISPLAY_LUX:
+        mode = "Luz";
+        /* code */
+        break;
+    }
+
+    oled_display_text(&oled, 3, "Mode", false);
+    oled_display_clear(&oled, 4);
+    oled_display_text(&oled, 4, mode, false);
+    ESP_LOGE("Button", "button_handler %d\n", button.status);
+}
+
+static void button_handler_task(void *arg)
+{
+    while (1)
+    {
+        StateTouch lastState;
+        lastState = button.status;
+        int level = gpio_get_level(button.gpio);
+    
+        ESP_LOGW("Button", "button  lastState%d\n", lastState);
+        ESP_LOGW("Button", "button_handler %d\n", level);
+
+        if (level == 1)
+        {
+            button.status = BUTTON_STATE_TOUCH;
+        }
+        else
+        {
+            button.status = BUTTON_STATE_RELEASE;
+        }
+
+        if (lastState == BUTTON_STATE_TOUCH && button.status == BUTTON_STATE_RELEASE)
+        {
+
+           button_handler(button);
+        }
+        /* code */
+        delayms(button.sensitivity);
+    }
+}
+
+void initButton(TouchButton *button)
+{
+    button->status = BUTTON_STATE_RELEASE;
+    button->time =0;
+    gpio_reset_pin(button->gpio);
+    gpio_set_direction(button->gpio, GPIO_MODE_INPUT);
 }
 
 void app_main(void)
@@ -790,9 +899,15 @@ void app_main(void)
     oled._reset = CONFIG_RESET_GPIO;
     initOled(&oled);
     oled_clear_screen(&oled, false);
-    oled_display_text(&oled, 7, FIRMWARE_VERSION, false);
+    logOlded(FIRMWARE_VERSION);
+
+     // Initialize touch
+    button.gpio = GPIO_NUM_21;
+    button.sensitivity = 100;
+    initButton(&button);
 
     event_group = xEventGroupCreate();
     xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
-    xTaskCreate(&app_task, "app_task", 8192, NULL, 5, NULL);
+    xTaskCreate(&button_handler_task, "button_handler_task", 4 * 1024, NULL, 5, NULL);
+    // ((xTaskCreate(&app_task, "app_task", 8192, NULL, 5, NULL);
 }
