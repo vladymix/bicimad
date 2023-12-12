@@ -599,7 +599,7 @@ void displayData()
     oled_display_clear(&oled, 2);
     switch (sensor.mode)
     {
-        
+
     case DISPLAY_NOISE:
         /* code */
         char dataNoise[14];
@@ -867,7 +867,7 @@ void ota_task(void *pvParameter)
 static void button_handler(TouchButton button)
 {
     sensor.mode++;
-    sensor.mode = sensor.mode % 3;
+    sensor.mode = sensor.mode % 4;
     ESP_LOGE("Button", "button_handler status:%d mode:%d\n", button.status, sensor.mode);
     displayData();
 }
@@ -936,7 +936,7 @@ void app_main(void)
     noise.adc_atten = ADC_ATTEN_DB_11;
     noise.adc_bits_width_t = ADC_WIDTH_BIT_12;
     noise.channel = ADC1_CHANNEL_7;
-    initAdc1(&dev);
+    initAdc1(&noise);
 
     oled_clear_screen(&oled, false);
     logOlded(FIRMWARE_VERSION);
