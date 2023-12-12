@@ -84,12 +84,15 @@ static char mqtt_msg[512];
 static EventGroupHandle_t event_group;
 static const char *TAG = "App Main";
 
-// DEVICES
+// *******   DEVICES  ***********
 AnalogicDevice lux;
+AnalogicDevice noise;
+
 esp_mqtt_client_handle_t mqtt = NULL;
 OLed oled;
 TouchButton button;
 Sensor sensor;
+BMP280 bmp;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
 //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
@@ -202,9 +205,15 @@ void wifi_init_sta(const char *running_partition_label)
          .password = "CONFIG_EXAMPLE_WIFI_PASSWORD",
      };*/
 
+    /* wifi_sta_config_t wifi_sta_config = {
+         .ssid = "SKYNET_2G",
+         .password = "4cedjte6xegw",
+     };
+     */
+
     wifi_sta_config_t wifi_sta_config = {
-        .ssid = "SKYNET_2G",
-        .password = "4cedjte6xegw",
+        .ssid = "SBC",
+        .password = "SBCwifi$",
     };
 
     wifi_config.sta = wifi_sta_config;
@@ -568,7 +577,20 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
 void readLux()
 {
     sensor.lux = readAdc1Value(&lux);
-    ESP_LOGW(TAG, "Read value Lux %d.\n", sensor.lux);
+    ESP_LOGW(TAG, "Read Lux %d.\n", sensor.lux);
+}
+void readNoise()
+{
+    sensor.noise = readAdc1Value(&noise);
+    ESP_LOGW(TAG, "Read Noise %d.\n", sensor.noise);
+}
+
+void readTemperature()
+{
+    uint8_t data = 0;
+    readBus(bmp, BME280_TEMPERATURE_MSB_REG, &data, 3);
+    printf("Data is temperature %d\n", data);
+    sensor.temperature = data;
 }
 
 void displayData()
@@ -577,6 +599,15 @@ void displayData()
     oled_display_clear(&oled, 2);
     switch (sensor.mode)
     {
+        
+    case DISPLAY_NOISE:
+        /* code */
+        char dataNoise[14];
+        sprintf(dataNoise, "%d", sensor.noise);
+        oled_display_text(&oled, 1, "Noise is: ", false);
+        oled_display_text(&oled, 2, dataNoise, false);
+        break;
+
     case DISPLAY_LUX:
         char data[14];
         sprintf(data, "%d", sensor.lux);
@@ -591,8 +622,10 @@ void displayData()
 
     case DISPLAY_TEMPERATURE:
         /* code */
+        char dataTemp[14];
+        sprintf(dataTemp, "%d", sensor.temperature);
         oled_display_text(&oled, 1, "Temperature is: ", false);
-        oled_display_text(&oled, 2, "No implemented", false);
+        oled_display_text(&oled, 2, dataTemp, false);
         break;
 
     default:
@@ -602,11 +635,14 @@ void displayData()
     // oled_display_text(&oled, 4, "Updated to", false);
     oled_display_text(&oled, 5, FIRMWARE_VERSION, false);
 }
+
 void logicSensor()
 {
     if (mqtt)
     {
         readLux();
+        readTemperature();
+        readNoise();
         displayData();
         sendData(mqtt, sensor);
         logOlded("Reading sensors");
@@ -872,28 +908,40 @@ void initButton(TouchButton *button)
 
 void app_main(void)
 {
-
-    sensor.mode = DISPLAY_LUX;
-
+    sensor.mode = DISPLAY_NOISE;
+    // Initialize OLED
     oled._sda = CONFIG_SDA_GPIO;
     oled._slc = CONFIG_SCL_GPIO;
     oled._reset = CONFIG_RESET_GPIO;
     initOled(&oled);
-    oled_clear_screen(&oled, false);
-    logOlded(FIRMWARE_VERSION);
 
+    // Initialize LDR
     lux.channel = ADC1_CHANNEL_4;
     lux.adc_atten = ADC_ATTEN_DB_11;
     lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
     initAdc1(&lux);
 
-    // Initialize touch
+    // Initialize touch button
     button.gpio = GPIO_NUM_21;
     button.sensitivity = 100;
     initButton(&button);
 
+    // Initialize BMP280
+    bmp._sda = GPIO_NUM_22;
+    bmp._slc = GPIO_NUM_23;
+    bmp._address = 0x76;
+    initBMP(&bmp);
+
+    // Initialize noise
+    noise.adc_atten = ADC_ATTEN_DB_11;
+    noise.adc_bits_width_t = ADC_WIDTH_BIT_12;
+    noise.channel = ADC1_CHANNEL_7;
+    initAdc1(&dev);
+
+    oled_clear_screen(&oled, false);
+    logOlded(FIRMWARE_VERSION);
+
     event_group = xEventGroupCreate();
     xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
     xTaskCreate(&button_handler_task, "button_handler_task", 4 * 1024, NULL, 5, NULL);
-    // ((xTaskCreate(&app_task, "app_task", 8192, NULL, 5, NULL);
 }

@@ -6,6 +6,7 @@ void chronometer(int ms, char *text);
 
 #include "driver/spi_master.h"
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C clock of SSD1306 can run at 400 kHz max. */
+#define I2C_MASTER_FREQ_100kHZ 100000 /*!< I2C clock of BMP280 can run at 100 kHz max. */
 #define I2CAddress 0x3C
 
 #define OLED_CONTROL_BYTE_CMD_STREAM 0x00
@@ -350,6 +351,8 @@ extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
         }                                                         \
     } while (0);
 
+
+
 typedef enum
 {
     BUTTON_STATE_TOUCH = 0,
@@ -361,6 +364,7 @@ typedef enum
     DISPLAY_LUX,
     DISPLAY_HUMIDITY,
     DISPLAY_TEMPERATURE,
+    DISPLAY_NOISE,
 } DisplayMode;
 
 typedef struct
@@ -374,9 +378,60 @@ typedef struct
 
 typedef struct
 {
-   DisplayMode mode;
-   int lux;
-   int temperature;
-   int humidity;
-  
+    DisplayMode mode;
+    int lux;
+    int temperature;
+    int humidity;
+    int noise;
+
 } Sensor;
+
+
+/*! @name I2C addresses */
+#define BME280_I2C_ADDR_PRIM                      UINT8_C(0x76)
+#define BME280_I2C_ADDR_SEC                       UINT8_C(0x77)
+
+#define BME280_REG_RESET                          UINT8_C(0xE0)
+
+#define BME280_CHIP_ID_REG                   (0xD0)  /*Chip ID Register */
+
+/**\name	I2C ADDRESS DEFINITIONS  */
+/***************************************************/
+#define BME280_I2C_ADDRESS1                  (0x76)
+#define BME280_I2C_ADDRESS2                  (0x77)
+
+#define	BME280_INIT_VALUE				(0)
+
+/****************************************************/
+/**\name	REGISTER ADDRESS DEFINITIONS  */
+/***************************************************/
+#define BME280_CHIP_ID_REG                   (0xD0)  /*Chip ID Register */
+#define BME280_RST_REG                       (0xE0)  /*Softreset Register */
+#define BME280_STAT_REG                      (0xF3)  /*Status Register */
+#define BME280_CTRL_MEAS_REG                 (0xF4)  /*Ctrl Measure Register */
+#define BME280_CTRL_HUMIDITY_REG             (0xF2)  /*Ctrl Humidity Register*/
+#define BME280_CONFIG_REG                    (0xF5)  /*Configuration Register */
+#define BME280_PRESSURE_MSB_REG              (0xF7)  /*Pressure MSB Register */
+#define BME280_PRESSURE_LSB_REG              (0xF8)  /*Pressure LSB Register */
+#define BME280_PRESSURE_XLSB_REG             (0xF9)  /*Pressure XLSB Register */
+#define BME280_TEMPERATURE_MSB_REG           (0xFA)  /*Temperature MSB Reg */
+#define BME280_TEMPERATURE_LSB_REG           (0xFB)  /*Temperature LSB Reg */
+#define BME280_TEMPERATURE_XLSB_REG          (0xFC)  /*Temperature XLSB Reg */
+#define BME280_HUMIDITY_MSB_REG              (0xFD)  /*Humidity MSB Reg */
+#define BME280_HUMIDITY_LSB_REG              (0xFE)  /*Humidity LSB Reg */
+/****************************************************/
+
+#define	BME280_GEN_READ_WRITE_DATA_LENGTH		(1)
+
+typedef struct
+{
+    int _sda;
+    int _slc;
+    int _reset;
+    int _address;
+} BMP280;
+
+void initBMP(BMP280 *dev);
+
+void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt);
+

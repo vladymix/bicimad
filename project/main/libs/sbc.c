@@ -16,6 +16,8 @@
 
 #define TAG "Sbc.c"
 
+ i2c_port_t portI2C = I2C_NUM_1;
+
 void delayms(int ms)
 {
     vTaskDelay(ms / portTICK_PERIOD_MS);
@@ -60,7 +62,7 @@ void loadInfo()
     esp_restart();
 }
 
-void chronometer(int ms, char* text)
+void chronometer(int ms, char *text)
 {
 
     int _ms = ms;
@@ -82,22 +84,22 @@ void chronometer(int ms, char* text)
         minutes = minutes - (hours * 60);
     }
 
-     char _s[9];
-     sprintf(_s, "%02d", seg);
-     char _cms[12];
-     sprintf(_cms, "%02d", _ms);
-    
-     strcpy(text, _s);
-     strcpy(text, ".");
-     strcpy(text, _cms);
-     //text = _s + "."+_cms;
+    char _s[9];
+    sprintf(_s, "%02d", seg);
+    char _cms[12];
+    sprintf(_cms, "%02d", _ms);
 
-     //strncpy("Fabricio", text, sizeof("Fabricio"));
+    strcpy(text, _s);
+    strcpy(text, ".");
+    strcpy(text, _cms);
+    // text = _s + "."+_cms;
 
-     printf("Chronometer %s:%s\n", _s, _cms);
-      printf(text);
+    // strncpy("Fabricio", text, sizeof("Fabricio"));
 
-   // sprintf(text, "%d", ms);
+    printf("Chronometer %s:%s\n", _s, _cms);
+    printf(text);
+
+    // sprintf(text, "%d", ms);
 }
 
 void i2c_contrast(OLed *dev, int contrast)
@@ -363,7 +365,8 @@ void oled_display_text(OLed *dev, int line, char *text, bool invert)
     oled_print_text(dev, line, text, size, invert);
 }
 
-void oled_display_clear(OLed *dev, int line){
+void oled_display_clear(OLed *dev, int line)
+{
     oled_display_text(dev, line, "                ", false);
 }
 
@@ -462,12 +465,12 @@ void initAdc2(AnalogicDevice *device)
     esp_err_t r = adc2_pad_get_io_num(device->channel, &adc_gpio_num);
     assert(r == ESP_OK);
 
-    ESP_LOGI(TAG, "ADC2 Channel:%d Atten:%d Gpio_num:%d\n",device->channel, device->adc_atten, adc_gpio_num);
+    ESP_LOGI(TAG, "ADC2 Channel:%d Atten:%d Gpio_num:%d\n", device->channel, device->adc_atten, adc_gpio_num);
 }
 
-int readAdc2Value(AnalogicDevice* device)
+int readAdc2Value(AnalogicDevice *device)
 {
-    int read_raw  = -1;
+    int read_raw = -1;
     esp_err_t r = adc2_get_raw(device->channel, device->adc_bits_width_t, &read_raw);
     if (r == ESP_OK)
     {
@@ -476,13 +479,16 @@ int readAdc2Value(AnalogicDevice* device)
     else if (r == ESP_ERR_TIMEOUT)
     {
         printf("Timeout read device.\n");
-    }else{
+    }
+    else
+    {
         printf("Error read");
     }
     return -1;
 }
 
-void initAdc1(AnalogicDevice* device){
+void initAdc1(AnalogicDevice *device)
+{
     adc1_config_width(device->adc_bits_width_t);
     adc1_config_channel_atten(device->channel, device->adc_atten);
 
@@ -492,8 +498,82 @@ void initAdc1(AnalogicDevice* device){
     printf("Initialized adc1 channel:%d. adc_atten:%d adc_gpio_num:%d\n", device->channel, device->adc_atten, adc_gpio_num);
 }
 
-int readAdc1Value(AnalogicDevice* device){
+int readAdc1Value(AnalogicDevice *device)
+{
     int val = adc1_get_raw(device->channel);
     return val;
 }
 
+void initBMP(BMP280 *dev)
+{
+    ESP_LOGI(TAG, "INTERFACE is i2c");
+    ESP_LOGI(TAG, "CONFIG_SDA_GPIO=%d", dev->_sda);
+    ESP_LOGI(TAG, "CONFIG_SCL_GPIO=%d", dev->_slc);
+    ESP_LOGI(TAG, "CONFIG_RESET_GPIO=%d", dev->_reset);
+    ESP_LOGI(TAG, "CONFIG_ADDRESS=%d", dev->_address);
+   
+
+
+    // i2c_master_init
+    i2c_config_t i2c_config = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = dev->_sda,
+        .scl_io_num = dev->_slc,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_100kHZ};
+
+    ESP_ERROR_CHECK(i2c_param_config(portI2C, &i2c_config));
+    ESP_ERROR_CHECK(i2c_driver_install(portI2C, I2C_MODE_MASTER, 0, 0, 0));
+
+
+    esp_err_t espRc;
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (dev->_address << 1) | I2C_MASTER_WRITE, true);
+
+    uint8_t reg_addr = BME280_CHIP_ID_REG;
+    uint8_t reg_data = 0x0;
+
+	i2c_master_write_byte(cmd, reg_addr, true);
+    i2c_master_write(cmd, &reg_data, BME280_GEN_READ_WRITE_DATA_LENGTH, true);
+	i2c_master_stop(cmd);
+
+	espRc = i2c_master_cmd_begin(portI2C, cmd, 10/portTICK_PERIOD_MS);
+	if (espRc == ESP_OK) {
+		 ESP_LOGI(TAG, "Sensor configured successfully");
+	} else {
+		 ESP_LOGE(TAG, "Sensor configuration failed. code: 0x%.2X", espRc);
+	}
+	i2c_cmd_link_delete(cmd);
+}
+
+void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
+   
+	esp_err_t espRc;
+
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_WRITE, true);
+	i2c_master_write_byte(cmd, reg_addr, true);
+
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_READ, true);
+
+	if (cnt > 1) {
+		i2c_master_read(cmd, reg_data, cnt-1, I2C_MASTER_ACK);
+	}
+	i2c_master_read_byte(cmd, reg_data+cnt-1, I2C_MASTER_NACK);
+	i2c_master_stop(cmd);
+
+	espRc = i2c_master_cmd_begin(portI2C, cmd, 10/portTICK_PERIOD_MS);
+	if (espRc == ESP_OK) {
+		 ESP_LOGI(TAG, "Sensor readed");
+	} else {
+		 ESP_LOGE(TAG, "Sensor fail readed");
+	}
+
+	i2c_cmd_link_delete(cmd);
+}
