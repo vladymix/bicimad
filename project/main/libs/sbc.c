@@ -577,3 +577,9 @@ void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
 
 	i2c_cmd_link_delete(cmd);
 }
+
+uint8_t readTemperature(BMP280 bmp){
+     uint8_t data = 0;
+    readBus(bmp, BME280_TEMPERATURE_MSB_REG, &data, 3);
+    return data;
+}

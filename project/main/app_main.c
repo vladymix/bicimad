@@ -49,11 +49,6 @@
 
 #include <sys/socket.h>
 
-/******** OLED ************/
-#define CONFIG_SCL_GPIO 18 // SCK
-#define CONFIG_SDA_GPIO 19
-#define CONFIG_RESET_GPIO -1 // no contains reset pin display
-
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
 
@@ -99,7 +94,7 @@ BMP280 bmp;
 esp_mqtt_client_config_t mqtt_cfg = {
     .broker.address.uri = "mqtt://mqtt.thingsboard.cloud",
     .broker.address.port = 1883,
-    .credentials.client_id = "tkbgb5tmw13oivovd6q3"};
+    .credentials.client_id = "tkbgb5tmw13oivovd6q3"}; // FUTURE USE MAC
 
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
@@ -351,7 +346,7 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "lux", sensor.lux);
     cJSON_AddNumberToObject(root, "humidity", sensor.humidity);
     cJSON_AddNumberToObject(root, "temperature", sensor.temperature);
-    cJSON_AddNumberToObject(root, "gas", 0);
+    cJSON_AddNumberToObject(root, "niose", sensor.noise);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
     // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
 
@@ -585,10 +580,9 @@ void readNoise()
     ESP_LOGW(TAG, "Read Noise %d.\n", sensor.noise);
 }
 
-void readTemperature()
+void readBmp()
 {
-    uint8_t data = 0;
-    readBus(bmp, BME280_TEMPERATURE_MSB_REG, &data, 3);
+    uint8_t data = readTemperature(bmp);
     printf("Data is temperature %d\n", data);
     sensor.temperature = data;
 }
@@ -641,7 +635,7 @@ void logicSensor()
     if (mqtt)
     {
         readLux();
-        readTemperature();
+        readBmp();
         readNoise();
         displayData();
         sendData(mqtt, sensor);
@@ -826,14 +820,14 @@ void ota_task(void *pvParameter)
         case STATE_APP_LOOP:
         {
             current_connection_state = connection_state(actual_event, "APP_LOOP");
-            logicSensor();
-            delayms(1000);
-
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
                 state = current_connection_state;
                 break;
             }
+
+            logicSensor();
+            delayms(1000);
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
@@ -897,6 +891,7 @@ static void button_handler_task(void *arg)
         delayms(button.sensitivity);
     }
 }
+
 
 void initButton(TouchButton *button)
 {

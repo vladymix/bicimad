@@ -1,10 +1,15 @@
 #include <stdio.h>
-
-void delayms(int time);
-void loadInfo();
-void chronometer(int ms, char *text);
-
 #include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "driver/adc_types_legacy.h"
+#include "driver/adc.h"
+
+
+/******** OLED ************/
+#define CONFIG_SCL_GPIO 18 // SCK
+#define CONFIG_SDA_GPIO 19
+#define CONFIG_RESET_GPIO -1 // no contains reset pin display
+
 #define I2C_MASTER_FREQ_HZ 400000 /*!< I2C clock of SSD1306 can run at 400 kHz max. */
 #define I2C_MASTER_FREQ_100kHZ 100000 /*!< I2C clock of BMP280 can run at 100 kHz max. */
 #define I2CAddress 0x3C
@@ -222,11 +227,12 @@ void oled_print_text(OLed *dev, int page, char *text, int text_len, bool invert)
 void oled_clear_screen(OLed *dev, bool invert);
 void oled_display_bitmap(OLed *dev, int xpos, int ypos, uint8_t *bitmap, int width, int height, bool invert);
 
-// ********* ADC *******
+// ** Commons ****
+void delayms(int time);
+void loadInfo();
+void chronometer(int ms, char *text);
 
-#include "driver/gpio.h"
-#include "driver/adc_types_legacy.h"
-#include "driver/adc.h"
+// ********* ADC *******
 
 /*
     ADC2_CHANNEL_0 = 0, !< ADC2 channel 0 is GPIO4  (ESP32), GPIO11 (ESP32-S2)
@@ -325,8 +331,10 @@ int readAdc1Value(AnalogicDevice *device);
 #define TB_SHARED_ATTR_FIELD_TARGET_FW_VER "fw_version"
 #define TB_ATTRIBUTES_TOPIC "v1/devices/me/attributes"
 
-/*! MQTT topic to subscribe for the receiving of the specified shared attribute after the request to ThingsBoard */
-#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/"
+/*! MQTT topic to subscribe for the receiving of the specified shared attribute after the request to ThingsBoard 
+https://thingsboard.io/docs/reference/mqtt-api/#firmware-api
+*/
+#define TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC "v1/devices/me/attributes/response/+"
 
 #define HASH_LEN 32
 
@@ -334,7 +342,7 @@ extern const uint8_t server_cert_pem_start[] asm("_binary_github_pem_start");
 extern const uint8_t server_cert_pem_end[] asm("_binary_github_pem_end");
 
 /*! Firmware version used for comparison after OTA config was received from ThingsBoard */
-#define FIRMWARE_VERSION "2.0"
+#define FIRMWARE_VERSION "6.0"
 /*! Body of the request of specified shared attributes */
 #define TB_SHARED_ATTR_KEYS_REQUEST "{\"sharedKeys\":\"fw_version,fw_url\"}"
 
@@ -359,6 +367,15 @@ typedef enum
     BUTTON_STATE_RELEASE = 1
 } StateTouch;
 
+typedef struct
+{
+    int gpio;
+    // Sensitivity response ms
+    int sensitivity;
+    StateTouch status;
+    int time;
+} TouchButton;
+
 typedef enum
 {
     DISPLAY_LUX,
@@ -369,21 +386,11 @@ typedef enum
 
 typedef struct
 {
-    int gpio;
-    // Sensitivity response ms
-    int sensitivity;
-    StateTouch status;
-    int time;
-} TouchButton;
-
-typedef struct
-{
     DisplayMode mode;
     int lux;
     int temperature;
     int humidity;
     int noise;
-
 } Sensor;
 
 
@@ -435,3 +442,4 @@ void initBMP(BMP280 *dev);
 
 void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt);
 
+uint8_t readTemperature(BMP280 dev);
