@@ -92,9 +92,9 @@ BMP280 bmp;
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
 //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
 esp_mqtt_client_config_t mqtt_cfg = {
-    .broker.address.uri = "mqtt://mqtt.thingsboard.cloud",
+    .broker.address.uri = "mqtt://demo.thingsboard.io",
     .broker.address.port = 1883,
-    .credentials.client_id = "tkbgb5tmw13oivovd6q3"}; // FUTURE USE MAC
+    .credentials.client_id = "ckawzufasqcuwqy7i7gf"}; // FUTURE USE MAC
 
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
@@ -550,6 +550,7 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
             .url = ota_config.targetFwServerUrl,
             .cert_pem = (char *)server_cert_pem_start,
             .event_handler = _ota_http_event_handler,
+            .keep_alive_enable = true
         };
         logOlded("Download...");
 
@@ -766,6 +767,8 @@ void ota_task(void *pvParameter)
         }
         case STATE_WAIT_OTA_CONFIG_FETCHED:
         {
+              state = STATE_APP_LOOP;
+              break;
             logOlded("OTA Fetched");
             current_connection_state = connection_state(actual_event, "WAIT_OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
