@@ -90,11 +90,12 @@ Sensor sensor;
 BMP280 bmp;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
-//{clientId:"ab2xshew87rhk9md6c0i"} Bici map
+//{clientId:"ab2xshew87rhk9md6c0i"} Bici mapç
+//5khzhxn2e2vq1o5qjm4k
 esp_mqtt_client_config_t mqtt_cfg = {
     .broker.address.uri = "mqtt://demo.thingsboard.io",
     .broker.address.port = 1883,
-    .credentials.client_id = "ckawzufasqcuwqy7i7gf"}; // FUTURE USE MAC
+    .credentials.client_id = "5khzhxn2e2vq1o5qjm4k"}; // FUTURE USE MAC
 
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
@@ -349,6 +350,7 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "niose", sensor.noise);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
     // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
+    printf("Sending data to thingsboard");
 
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
