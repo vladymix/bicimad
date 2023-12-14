@@ -27,15 +27,15 @@
 #include "freertos/event_groups.h"
 
 #include "esp_log.h"
-#include "mqtt_client.h"
 
 #include "cJSON.h"
 #include "libs/sbc.h"
+#include "libs/mqtt.h"
 
 #include <esp_timer.h>
 
 #include "esp_ota_ops.h"
-#include "esp_http_client.h"
+
 #include "esp_https_ota.h"
 #include "esp_crt_bundle.h"
 #include "nvs.h"
@@ -55,26 +55,6 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 
-/**
- * @brief Set of states for @ref ota_task(void)
- */
-enum state
-{
-    STATE_RETRY_CONECTED,
-    STATE_INITIAL,
-    STATE_WAIT_WIFI,
-    STATE_WIFI_CONNECTED,
-    STATE_WAIT_MQTT,
-    STATE_MQTT_CONNECTED,
-    STATE_WAIT_OTA_CONFIG_FETCHED,
-    STATE_OTA_CONFIG_FETCHED,
-    STATE_APP_LOOP,
-    STATE_CONNECTION_IS_OK
-};
-
-/*! Buffer to save a received MQTT message */
-static char mqtt_msg[512];
-
 /*! Saves bit values used in application */
 static EventGroupHandle_t event_group;
 static const char *TAG = "App Main";
@@ -82,19 +62,16 @@ static const char *TAG = "App Main";
 // *******   DEVICES  ***********
 AnalogicDevice lux;
 AnalogicDevice noise;
-
-esp_mqtt_client_handle_t mqtt = NULL;
 OLed oled;
 TouchButton button;
 Sensor sensor;
 BMP280 bmp;
+Device device;
 
 //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
 //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
-esp_mqtt_client_config_t mqtt_cfg = {
-    .broker.address.uri = "mqtt://mqtt.thingsboard.cloud",
-    .broker.address.port = 1883,
-    .credentials.client_id = "tkbgb5tmw13oivovd6q3"}; // FUTURE USE MAC
+// tkbgb5tmw13oivovd6q3 // my thinger
+// h6s7vg0nliofvy0c4lfk // sbc
 
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
@@ -154,6 +131,51 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
+static bool fw_versions_are_equal(const char *current_ver, const char *target_ver)
+{
+    assert(current_ver != NULL && target_ver != NULL);
+
+    if (strcmp(current_ver, target_ver) == 0)
+    {
+        ESP_LOGW(TAG, "Skipping OTA, firmware versions are equal - current: %s, target: %s", FIRMWARE_VERSION, shared_attributes.targetFwVer);
+        return true;
+    }
+    return false;
+}
+
+static bool ota_params_are_specified(struct shared_keys ota_config)
+{
+    if (strlen(ota_config.targetFwServerUrl) == 0)
+    {
+        ESP_LOGW(TAG, "Firmware URL is not specified");
+        return false;
+    }
+
+    if (strlen(ota_config.targetFwVer) == 0)
+    {
+        ESP_LOGW(TAG, "Target firmware version is not specified");
+        return false;
+    }
+
+    return true;
+}
+
+static void logOlded(char *log)
+{
+    // Clear
+    oled_display_clear(&oled, 7);
+    // Print
+    oled_display_text(&oled, 7, log, false);
+}
+
+void parseMac()
+{
+    char macAddress[30];
+    sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
+    logOlded(macAddress);
+    device.config.credentials.client_id = macAddress;
+}
+
 void wifi_init_sta(const char *running_partition_label)
 {
     assert(running_partition_label != NULL);
@@ -200,16 +222,16 @@ void wifi_init_sta(const char *running_partition_label)
          .password = "CONFIG_EXAMPLE_WIFI_PASSWORD",
      };*/
 
+    wifi_sta_config_t wifi_sta_config = {
+        .ssid = "SKYNET_2G",
+        .password = "4cedjte6xegw",
+    };
+
     /* wifi_sta_config_t wifi_sta_config = {
-         .ssid = "SKYNET_2G",
-         .password = "4cedjte6xegw",
+         .ssid = "SBC",
+         .password = "SBCwifi$",
      };
      */
-
-    wifi_sta_config_t wifi_sta_config = {
-        .ssid = "SBC",
-        .password = "SBCwifi$",
-    };
 
     wifi_config.sta = wifi_sta_config;
 
@@ -228,6 +250,7 @@ void wifi_init_sta(const char *running_partition_label)
 
     APP_ABORT_ON_ERROR(esp_wifi_get_mac(ESP_IF_WIFI_STA, esp32_mac))
     ESP_LOGI(TAG, "MAC address: %02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
+    parseMac();
     APP_ABORT_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA));
 
     APP_ABORT_ON_ERROR(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
@@ -259,43 +282,6 @@ void wifi_init_sta(const char *running_partition_label)
     {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
-}
-
-static bool fw_versions_are_equal(const char *current_ver, const char *target_ver)
-{
-    assert(current_ver != NULL && target_ver != NULL);
-
-    if (strcmp(current_ver, target_ver) == 0)
-    {
-        ESP_LOGW(TAG, "Skipping OTA, firmware versions are equal - current: %s, target: %s", FIRMWARE_VERSION, shared_attributes.targetFwVer);
-        return true;
-    }
-    return false;
-}
-
-static bool ota_params_are_specified(struct shared_keys ota_config)
-{
-    if (strlen(ota_config.targetFwServerUrl) == 0)
-    {
-        ESP_LOGW(TAG, "Firmware URL is not specified");
-        return false;
-    }
-
-    if (strlen(ota_config.targetFwVer) == 0)
-    {
-        ESP_LOGW(TAG, "Target firmware version is not specified");
-        return false;
-    }
-
-    return true;
-}
-
-static void logOlded(const char *log)
-{
-    // Clear
-    oled_display_clear(&oled, 7);
-    // Print
-    oled_display_text(&oled, 7, log, false);
 }
 
 static enum state connection_state(BaseType_t actual_event, const char *current_state_name)
@@ -391,11 +377,11 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         msg_id = esp_mqtt_client_unsubscribe(client, "/topic/qos1");
         ESP_LOGI(TAG, "sent unsubscribe successful, msg_id=%d", msg_id);
 
-        mqtt = client;
+        device.client = client;
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-        mqtt = NULL;
+        device.client = client = NULL;
         xEventGroupClearBits(event_group, MQTT_CONNECTED_EVENT);
         xEventGroupSetBits(event_group, MQTT_DISCONNECTED_EVENT);
         break;
@@ -469,14 +455,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
-static void mqtt_app_start(void)
-{
-    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    esp_mqtt_client_start(client);
-}
-
 static void print_sha256(const uint8_t *image_hash, const char *label)
 {
     char hash_print[HASH_LEN * 2 + 1];
@@ -486,23 +464,6 @@ static void print_sha256(const uint8_t *image_hash, const char *label)
         sprintf(&hash_print[i * 2], "%02x", image_hash[i]);
     }
     ESP_LOGI(TAG, "%s %s", label, hash_print);
-}
-
-static void initMqtt(void)
-{
-    ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
-    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
-
-    esp_log_level_set("*", ESP_LOG_INFO);
-    esp_log_level_set("mqtt_client", ESP_LOG_VERBOSE);
-    esp_log_level_set("mqtt_example", ESP_LOG_VERBOSE);
-    esp_log_level_set("transport_base", ESP_LOG_VERBOSE);
-    esp_log_level_set("esp-tls", ESP_LOG_VERBOSE);
-    esp_log_level_set("transport", ESP_LOG_VERBOSE);
-    esp_log_level_set("outbox", ESP_LOG_VERBOSE);
-
-    mqtt_app_start();
 }
 
 esp_err_t _ota_http_event_handler(esp_http_client_event_t *evt)
@@ -574,6 +535,7 @@ void readLux()
     sensor.lux = readAdc1Value(&lux);
     ESP_LOGW(TAG, "Read Lux %d.\n", sensor.lux);
 }
+
 void readNoise()
 {
     sensor.noise = readAdc1Value(&noise);
@@ -632,18 +594,18 @@ void displayData()
 
 void logicSensor()
 {
-    if (mqtt)
+    if (device.client)
     {
         readLux();
         readBmp();
         readNoise();
         displayData();
-        sendData(mqtt, sensor);
+        sendData(device.client, sensor);
         logOlded("Reading sensors");
     }
     else
     {
-        logOlded("MQTT NO ENABLED");
+        logOlded("Client no set");
         oled_display_text(&oled, 7, "MQTT NO ENABLE", false);
     }
 }
@@ -688,10 +650,10 @@ void ota_task(void *pvParameter)
                 // OTA app partition table has a smaller NVS partition size than the non-OTA
                 // partition table. This size mismatch may cause NVS initialization to fail.
                 // If this happens, we erase NVS partition and initialize NVS again.
-                // TODO APP_ABORT_ON_ERROR(nvs_flash_erase());
+                APP_ABORT_ON_ERROR(nvs_flash_erase());
                 err = nvs_flash_init();
             }
-            // TODO APP_ABORT_ON_ERROR(err);
+            APP_ABORT_ON_ERROR(err);
 
             const esp_partition_t *running_partition = esp_ota_get_running_partition();
             strncpy(running_partition_label, running_partition->label, sizeof(running_partition_label));
@@ -716,9 +678,9 @@ void ota_task(void *pvParameter)
 
             if (actual_event & WIFI_CONNECTED_EVENT)
             {
-                ESP_LOGD(TAG, "********  Init MQTT *************");
-                initMqtt();
-                // TODO  mqtt_app_start(running_partition_label);
+                ESP_LOGD(TAG, "********  Start MQTT *************");
+                startMqtt(device);
+
                 state = STATE_WAIT_MQTT;
                 break;
             }
@@ -747,13 +709,13 @@ void ota_task(void *pvParameter)
                 cJSON_AddStringToObject(current_fw, TB_CLIENT_ATTR_FIELD_CURRENT_FW, FIRMWARE_VERSION);
                 char *current_fw_attribute = cJSON_PrintUnformatted(current_fw);
                 cJSON_Delete(current_fw);
-                esp_mqtt_client_publish(mqtt, TB_ATTRIBUTES_TOPIC, current_fw_attribute, 0, 1, 0);
+                esp_mqtt_client_publish(device.client, TB_ATTRIBUTES_TOPIC, current_fw_attribute, 0, 1, 0);
                 // Free is intentional, it's client responsibility to free the result of cJSON_Print
                 free(current_fw_attribute);
 
                 // Send the shared attributes keys to receive their values
-                esp_mqtt_client_subscribe(mqtt, TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC, 1);
-                esp_mqtt_client_publish(mqtt, TB_ATTRIBUTES_REQUEST_TOPIC, TB_SHARED_ATTR_KEYS_REQUEST, 0, 1, 0);
+                esp_mqtt_client_subscribe(device.client, TB_ATTRIBUTES_SUBSCRIBE_TO_RESPONSE_TOPIC, 1);
+                esp_mqtt_client_publish(device.client, TB_ATTRIBUTES_REQUEST_TOPIC, TB_SHARED_ATTR_KEYS_REQUEST, 0, 1, 0);
                 ESP_LOGI(TAG, "Waiting for shared attributes response");
                 logOlded("Waiting config");
                 state = STATE_WAIT_OTA_CONFIG_FETCHED;
@@ -808,7 +770,7 @@ void ota_task(void *pvParameter)
                 ESP_LOGE(TAG, "WAIT WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT actual event%d", actual_event);
                 start_ota(FIRMWARE_VERSION, shared_attributes);
                 ESP_LOGE(TAG, "Parsed data actual event%d", actual_event);
-                esp_mqtt_client_subscribe(mqtt, TB_ATTRIBUTES_TOPIC, 1);
+                esp_mqtt_client_subscribe(device.client, TB_ATTRIBUTES_TOPIC, 1);
                 ESP_LOGI(TAG, "Subscribed to shared attributes updates");
                 state = STATE_APP_LOOP;
                 break;
@@ -892,7 +854,6 @@ static void button_handler_task(void *arg)
     }
 }
 
-
 void initButton(TouchButton *button)
 {
     button->status = BUTTON_STATE_RELEASE;
@@ -903,6 +864,9 @@ void initButton(TouchButton *button)
 
 void app_main(void)
 {
+    device.event_handler = mqtt_event_handler;
+    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "tkbgb5tmw13oivovd6q3");
+
     sensor.mode = DISPLAY_NOISE;
     // Initialize OLED
     oled._sda = CONFIG_SDA_GPIO;

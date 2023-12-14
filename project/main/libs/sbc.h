@@ -443,3 +443,20 @@ void initBMP(BMP280 *dev);
 void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt);
 
 uint8_t readTemperature(BMP280 dev);
+
+/**
+ * @brief Set of states for @ref ota_task(void)
+ */
+enum state
+{
+    STATE_RETRY_CONECTED,
+    STATE_INITIAL,
+    STATE_WAIT_WIFI,
+    STATE_WIFI_CONNECTED,
+    STATE_WAIT_MQTT,
+    STATE_MQTT_CONNECTED,
+    STATE_WAIT_OTA_CONFIG_FETCHED,
+    STATE_OTA_CONFIG_FETCHED,
+    STATE_APP_LOOP,
+    STATE_CONNECTION_IS_OK
+};
