@@ -549,9 +549,29 @@ void initBMP(BMP280 *dev)
 	i2c_cmd_link_delete(cmd);
 }
 
+void writeBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
+    esp_err_t espRc = BME280_INIT_VALUE;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_WRITE, true);
+
+	i2c_master_write_byte(cmd, reg_addr, true);
+	i2c_master_write(cmd, reg_data, cnt, true);
+	i2c_master_stop(cmd);
+
+	espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10/portTICK_PERIOD_MS);
+	if (espRc == ESP_OK) {
+		 ESP_LOGI(TAG, "Sensor readed");
+	} else {
+		 ESP_LOGE(TAG, "Sensor fail readed");
+	}
+	i2c_cmd_link_delete(cmd);
+}
+
 void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
    
-	esp_err_t espRc;
+	esp_err_t espRc = BME280_INIT_VALUE;
 
 	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 

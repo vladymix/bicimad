@@ -68,11 +68,6 @@ Sensor sensor;
 BMP280 bmp;
 Device device;
 
-//{clientId:"ckawzufasqcuwqy7i7gf"} sbc
-//{clientId:"ab2xshew87rhk9md6c0i"} Bici map
-// tkbgb5tmw13oivovd6q3 // my thinger
-// h6s7vg0nliofvy0c4lfk // sbc
-
 /*! Saves OTA config received from ThingsBoard*/
 static struct shared_keys
 {
@@ -168,7 +163,7 @@ static void logOlded(char *log)
     oled_display_text(&oled, 7, log, false);
 }
 
-void parseMac()
+void setMacToMqtt()
 {
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
@@ -250,7 +245,7 @@ void wifi_init_sta(const char *running_partition_label)
 
     APP_ABORT_ON_ERROR(esp_wifi_get_mac(ESP_IF_WIFI_STA, esp32_mac))
     ESP_LOGI(TAG, "MAC address: %02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
-    parseMac();
+    setMacToMqtt();
     APP_ABORT_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA));
 
     APP_ABORT_ON_ERROR(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
@@ -864,6 +859,9 @@ void initButton(TouchButton *button)
 
 void app_main(void)
 {
+    //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
+    //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
+    // h6s7vg0nliofvy0c4lfk // sbc
     device.event_handler = mqtt_event_handler;
     setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "tkbgb5tmw13oivovd6q3");
 
