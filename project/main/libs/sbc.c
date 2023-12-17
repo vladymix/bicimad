@@ -616,7 +616,7 @@ void initBMP(struct bme280_t *dev)
     }
 }
 
-void readDataBmp(struct bme280_t dev, double *_pressure, double *_temperature, double *_humidity)
+void readDataBmp(struct bme280_t dev, Sensor *sensor)
 {
 
     s32 v_uncomp_pressure_s32;
@@ -628,9 +628,14 @@ void readDataBmp(struct bme280_t dev, double *_pressure, double *_temperature, d
 
     if (com_rslt == SUCCESS)
     {
+    
+
         double temperature = bme280_compensate_temperature_double(v_uncomp_temperature_s32);
         double pressure =  bme280_compensate_pressure_double(v_uncomp_pressure_s32) / 100; // Pa -> hPa;
         double humidity =  bme280_compensate_humidity_double(v_uncomp_humidity_s32);
+       sensor->temperature = temperature;
+       sensor-> pressure = pressure;
+       sensor->humidity = humidity;
 
         ESP_LOGI(TAG, "%.2f degC / %.3f hPa / %.3f %%",
                 temperature,

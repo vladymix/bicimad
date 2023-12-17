@@ -389,8 +389,8 @@ typedef struct
 {
     DisplayMode mode;
     int lux;
-    int temperature;
-    int humidity;
+    double temperature;
+    double humidity;
     int noise;
     double pressure;
 } Sensor;
@@ -399,7 +399,7 @@ typedef struct
 
 void initBMP(struct bme280_t *dev);
 
-void readDataBmp(struct bme280_t dev, double *_pressure, double *_temperature, double *_humidity);
+void readDataBmp(struct bme280_t dev, Sensor *sensor);
 
 /**
  * @brief Set of states for @ref ota_task(void)

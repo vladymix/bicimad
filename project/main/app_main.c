@@ -327,9 +327,10 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "lux", sensor.lux);
     cJSON_AddNumberToObject(root, "humidity", sensor.humidity);
     cJSON_AddNumberToObject(root, "temperature", sensor.temperature);
-    cJSON_AddNumberToObject(root, "niose", sensor.noise);
+    cJSON_AddNumberToObject(root, "noise", sensor.noise);
+    cJSON_AddNumberToObject(root, "pressure", sensor.pressure);
+    cJSON_AddNumberToObject(root, "display_mode", sensor.mode);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
-    // En la telemetría de Thingsboard aparecerá key = key y value = 0.336
 
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
@@ -539,13 +540,7 @@ void readNoise()
 
 void readBmp()
 {
-    // uint8_t data = readTemperature(bmp);
-    // printf("Data is temperature %d\n", data);
-    // sensor.temperature = data;
-    double v_uncomp_pressure_s32;
-    double v_uncomp_temperature_s32;
-    double v_uncomp_humidity_s32;
-    readDataBmp(bmp, &v_uncomp_pressure_s32, &v_uncomp_temperature_s32, &v_uncomp_humidity_s32);
+    readDataBmp(bmp, &sensor);
 }
 
 void displayData()
@@ -571,14 +566,24 @@ void displayData()
         break;
     case DISPLAY_HUMIDITY:
         /* code */
+        char dataHumidity[14];
+        sprintf(dataHumidity, "%f", sensor.humidity);
         oled_display_text(&oled, 1, "Humidity is: ", false);
-        oled_display_text(&oled, 2, "No implemented", false);
+        oled_display_text(&oled, 2, dataHumidity, false);
+        break;
+
+    case DISPLAY_PRESSURE:
+        /* code */
+        char dataPressure[14];
+        sprintf(dataPressure, "%f", sensor.pressure);
+        oled_display_text(&oled, 1, "Pressure is: ", false);
+        oled_display_text(&oled, 2, dataPressure, false);
         break;
 
     case DISPLAY_TEMPERATURE:
         /* code */
         char dataTemp[14];
-        sprintf(dataTemp, "%d", sensor.temperature);
+        sprintf(dataTemp, "%f", sensor.temperature);
         oled_display_text(&oled, 1, "Temperature is: ", false);
         oled_display_text(&oled, 2, dataTemp, false);
         break;
@@ -605,7 +610,6 @@ void logicSensor()
     else
     {
         logOlded("Client no set");
-        oled_display_text(&oled, 7, "MQTT NO ENABLE", false);
     }
 }
 
@@ -788,7 +792,7 @@ void ota_task(void *pvParameter)
             }
 
             logicSensor();
-            delayms(1000);
+            delayms(30000);
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
@@ -822,7 +826,7 @@ void ota_task(void *pvParameter)
 static void button_handler(TouchButton button)
 {
     sensor.mode++;
-    sensor.mode = sensor.mode % 4;
+    sensor.mode = sensor.mode % 5;
     ESP_LOGE("Button", "button_handler status:%d mode:%d\n", button.status, sensor.mode);
     displayData();
 }
@@ -887,11 +891,11 @@ void app_main(void)
     //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
     //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
     // h6s7vg0nliofvy0c4lfk // sbc
-    // 8plu6opoxckrvvw9gjx7 thisnger io mario 
+    // 8plu6opoxckrvvw9gjx7 thisnger io mario
     device.event_handler = mqtt_event_handler;
-    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "8plu6opoxckrvvw9gjx7");
+    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "b57qiyaox4ndlk5jc4m1");
 
-    sensor.mode = DISPLAY_NOISE;
+    sensor.mode = DISPLAY_TEMPERATURE;
     // Initialize OLED
     oled._sda = CONFIG_SDA_GPIO;
     oled._slc = CONFIG_SCL_GPIO;
