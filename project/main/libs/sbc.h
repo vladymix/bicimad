@@ -3,7 +3,7 @@
 #include "driver/gpio.h"
 #include "driver/adc_types_legacy.h"
 #include "driver/adc.h"
-
+#include "libs/bme280.h"
 
 /******** OLED ************/
 #define CONFIG_SCL_GPIO 18 // SCK
@@ -381,6 +381,7 @@ typedef enum
     DISPLAY_LUX,
     DISPLAY_HUMIDITY,
     DISPLAY_TEMPERATURE,
+    DISPLAY_PRESSURE,
     DISPLAY_NOISE,
 } DisplayMode;
 
@@ -391,58 +392,14 @@ typedef struct
     int temperature;
     int humidity;
     int noise;
+    double pressure;
 } Sensor;
 
 
-/*! @name I2C addresses */
-#define BME280_I2C_ADDR_PRIM                      UINT8_C(0x76)
-#define BME280_I2C_ADDR_SEC                       UINT8_C(0x77)
 
-#define BME280_REG_RESET                          UINT8_C(0xE0)
+void initBMP(struct bme280_t *dev);
 
-#define BME280_CHIP_ID_REG                   (0xD0)  /*Chip ID Register */
-
-/**\name	I2C ADDRESS DEFINITIONS  */
-/***************************************************/
-#define BME280_I2C_ADDRESS1                  (0x76)
-#define BME280_I2C_ADDRESS2                  (0x77)
-
-#define	BME280_INIT_VALUE				(0)
-
-/****************************************************/
-/**\name	REGISTER ADDRESS DEFINITIONS  */
-/***************************************************/
-#define BME280_CHIP_ID_REG                   (0xD0)  /*Chip ID Register */
-#define BME280_RST_REG                       (0xE0)  /*Softreset Register */
-#define BME280_STAT_REG                      (0xF3)  /*Status Register */
-#define BME280_CTRL_MEAS_REG                 (0xF4)  /*Ctrl Measure Register */
-#define BME280_CTRL_HUMIDITY_REG             (0xF2)  /*Ctrl Humidity Register*/
-#define BME280_CONFIG_REG                    (0xF5)  /*Configuration Register */
-#define BME280_PRESSURE_MSB_REG              (0xF7)  /*Pressure MSB Register */
-#define BME280_PRESSURE_LSB_REG              (0xF8)  /*Pressure LSB Register */
-#define BME280_PRESSURE_XLSB_REG             (0xF9)  /*Pressure XLSB Register */
-#define BME280_TEMPERATURE_MSB_REG           (0xFA)  /*Temperature MSB Reg */
-#define BME280_TEMPERATURE_LSB_REG           (0xFB)  /*Temperature LSB Reg */
-#define BME280_TEMPERATURE_XLSB_REG          (0xFC)  /*Temperature XLSB Reg */
-#define BME280_HUMIDITY_MSB_REG              (0xFD)  /*Humidity MSB Reg */
-#define BME280_HUMIDITY_LSB_REG              (0xFE)  /*Humidity LSB Reg */
-/****************************************************/
-
-#define	BME280_GEN_READ_WRITE_DATA_LENGTH		(1)
-
-typedef struct
-{
-    int _sda;
-    int _slc;
-    int _reset;
-    int _address;
-} BMP280;
-
-void initBMP(BMP280 *dev);
-
-void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt);
-
-uint8_t readTemperature(BMP280 dev);
+void readDataBmp(struct bme280_t dev, double *_pressure, double *_temperature, double *_humidity);
 
 /**
  * @brief Set of states for @ref ota_task(void)

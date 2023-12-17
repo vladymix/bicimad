@@ -16,7 +16,7 @@
 
 #define TAG "Sbc.c"
 
- i2c_port_t portI2C = I2C_NUM_1;
+i2c_port_t port_bme280 = I2C_NUM_1;
 
 void delayms(int ms)
 {
@@ -504,15 +504,76 @@ int readAdc1Value(AnalogicDevice *device)
     return val;
 }
 
-void initBMP(BMP280 *dev)
+int8_t writeBus(uint8_t dev_addr, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt)
+{
+     int result = 0;
+    esp_err_t espRc = BME280_INIT_VALUE;
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (dev_addr << 1) | I2C_MASTER_WRITE, true);
+
+    i2c_master_write_byte(cmd, reg_addr, true);
+    i2c_master_write(cmd, reg_data, cnt, true);
+    i2c_master_stop(cmd);
+
+    espRc = i2c_master_cmd_begin(port_bme280, cmd, 10 / portTICK_PERIOD_MS);
+    if (espRc == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Sensor write bus");
+    }
+    else
+    {
+         result = reg_addr;
+        ESP_LOGE(TAG, "Sensor write fail to: %u", reg_addr);
+    }
+    i2c_cmd_link_delete(cmd);
+    return result;
+}
+
+int8_t readBus(uint8_t dev_address, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt)
+{
+    int result = 0;
+
+    esp_err_t espRc = BME280_INIT_VALUE;
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (dev_address << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, reg_addr, true);
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (dev_address << 1) | I2C_MASTER_READ, true);
+
+    if (cnt > 1)
+    {
+        i2c_master_read(cmd, reg_data, cnt - 1, I2C_MASTER_ACK);
+    }
+    i2c_master_read_byte(cmd, reg_data + cnt - 1, I2C_MASTER_NACK);
+    i2c_master_stop(cmd);
+
+    espRc = i2c_master_cmd_begin(port_bme280, cmd, 10 / portTICK_PERIOD_MS);
+    if (espRc == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Sensor read bus");
+    }
+    else
+    {
+        result = reg_addr;
+        ESP_LOGE(TAG, "Sensor fail read bus %u", reg_addr);
+    }
+
+    i2c_cmd_link_delete(cmd);
+    return result;
+}
+
+void initBMP(struct bme280_t *dev)
 {
     ESP_LOGI(TAG, "INTERFACE is i2c");
     ESP_LOGI(TAG, "CONFIG_SDA_GPIO=%d", dev->_sda);
     ESP_LOGI(TAG, "CONFIG_SCL_GPIO=%d", dev->_slc);
-    ESP_LOGI(TAG, "CONFIG_RESET_GPIO=%d", dev->_reset);
-    ESP_LOGI(TAG, "CONFIG_ADDRESS=%d", dev->_address);
-   
-
+    ESP_LOGI(TAG, "CONFIG_ADDRESS=%d", dev->dev_addr);
 
     // i2c_master_init
     i2c_config_t i2c_config = {
@@ -523,83 +584,61 @@ void initBMP(BMP280 *dev)
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = I2C_MASTER_FREQ_100kHZ};
 
-    ESP_ERROR_CHECK(i2c_param_config(portI2C, &i2c_config));
-    ESP_ERROR_CHECK(i2c_driver_install(portI2C, I2C_MODE_MASTER, 0, 0, 0));
+    ESP_ERROR_CHECK(i2c_param_config(port_bme280, &i2c_config));
+    ESP_ERROR_CHECK(i2c_driver_install(port_bme280, I2C_MODE_MASTER, 0, 0, 0));
 
+    dev->delay_msec = delayms;
+    dev->bus_read = readBus;
+    dev->bus_write = writeBus;
 
-    esp_err_t espRc;
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    s32 com_rslt;
+    s32 v_uncomp_pressure_s32;
+    s32 v_uncomp_temperature_s32;
+    s32 v_uncomp_humidity_s32;
 
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (dev->_address << 1) | I2C_MASTER_WRITE, true);
+    com_rslt = bme280_init(dev);
 
-    uint8_t reg_addr = BME280_CHIP_ID_REG;
-    uint8_t reg_data = 0x0;
+    com_rslt += bme280_set_oversamp_pressure(BME280_OVERSAMP_16X);
+    com_rslt += bme280_set_oversamp_temperature(BME280_OVERSAMP_2X);
+    com_rslt += bme280_set_oversamp_humidity(BME280_OVERSAMP_1X);
 
-	i2c_master_write_byte(cmd, reg_addr, true);
-    i2c_master_write(cmd, &reg_data, BME280_GEN_READ_WRITE_DATA_LENGTH, true);
-	i2c_master_stop(cmd);
+    com_rslt += bme280_set_standby_durn(BME280_STANDBY_TIME_1_MS);
+    com_rslt += bme280_set_filter(BME280_FILTER_COEFF_16);
 
-	espRc = i2c_master_cmd_begin(portI2C, cmd, 10/portTICK_PERIOD_MS);
-	if (espRc == ESP_OK) {
-		 ESP_LOGI(TAG, "Sensor configured successfully");
-	} else {
-		 ESP_LOGE(TAG, "Sensor configuration failed. code: 0x%.2X", espRc);
-	}
-	i2c_cmd_link_delete(cmd);
+    com_rslt += bme280_set_power_mode(BME280_NORMAL_MODE);
+    if (com_rslt == SUCCESS)
+    {
+        ESP_LOGI(TAG, "Sensor init");
+    }
+    else
+    {
+        ESP_LOGE(TAG, "Sensor init fail %u", com_rslt);
+    }
 }
 
-void writeBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
-    esp_err_t espRc = BME280_INIT_VALUE;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+void readDataBmp(struct bme280_t dev, double *_pressure, double *_temperature, double *_humidity)
+{
 
-    i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_WRITE, true);
+    s32 v_uncomp_pressure_s32;
+    s32 v_uncomp_temperature_s32;
+    s32 v_uncomp_humidity_s32;
 
-	i2c_master_write_byte(cmd, reg_addr, true);
-	i2c_master_write(cmd, reg_data, cnt, true);
-	i2c_master_stop(cmd);
+    int com_rslt = bme280_read_uncomp_pressure_temperature_humidity(
+        &v_uncomp_pressure_s32, &v_uncomp_temperature_s32, &v_uncomp_humidity_s32);
 
-	espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10/portTICK_PERIOD_MS);
-	if (espRc == ESP_OK) {
-		 ESP_LOGI(TAG, "Sensor readed");
-	} else {
-		 ESP_LOGE(TAG, "Sensor fail readed");
-	}
-	i2c_cmd_link_delete(cmd);
-}
+    if (com_rslt == SUCCESS)
+    {
+        double temperature = bme280_compensate_temperature_double(v_uncomp_temperature_s32);
+        double pressure =  bme280_compensate_pressure_double(v_uncomp_pressure_s32) / 100; // Pa -> hPa;
+        double humidity =  bme280_compensate_humidity_double(v_uncomp_humidity_s32);
 
-void readBus(BMP280 dev, uint8_t reg_addr, uint8_t *reg_data, uint8_t cnt){
-   
-	esp_err_t espRc = BME280_INIT_VALUE;
-
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_WRITE, true);
-	i2c_master_write_byte(cmd, reg_addr, true);
-
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, (dev._address << 1) | I2C_MASTER_READ, true);
-
-	if (cnt > 1) {
-		i2c_master_read(cmd, reg_data, cnt-1, I2C_MASTER_ACK);
-	}
-	i2c_master_read_byte(cmd, reg_data+cnt-1, I2C_MASTER_NACK);
-	i2c_master_stop(cmd);
-
-	espRc = i2c_master_cmd_begin(portI2C, cmd, 10/portTICK_PERIOD_MS);
-	if (espRc == ESP_OK) {
-		 ESP_LOGI(TAG, "Sensor readed");
-	} else {
-		 ESP_LOGE(TAG, "Sensor fail readed");
-	}
-
-	i2c_cmd_link_delete(cmd);
-}
-
-uint8_t readTemperature(BMP280 bmp){
-     uint8_t data = 0;
-    readBus(bmp, BME280_TEMPERATURE_MSB_REG, &data, 3);
-    return data;
+        ESP_LOGI(TAG, "%.2f degC / %.3f hPa / %.3f %%",
+                temperature,
+                pressure,
+                humidity);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "measure error. code: %d", com_rslt);
+    }
 }

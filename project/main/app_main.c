@@ -65,7 +65,7 @@ AnalogicDevice noise;
 OLed oled;
 TouchButton button;
 Sensor sensor;
-BMP280 bmp;
+struct bme280_t bmp;
 Device device;
 
 /*! Saves OTA config received from ThingsBoard*/
@@ -539,9 +539,13 @@ void readNoise()
 
 void readBmp()
 {
-    uint8_t data = readTemperature(bmp);
-    printf("Data is temperature %d\n", data);
-    sensor.temperature = data;
+    //uint8_t data = readTemperature(bmp);
+    //printf("Data is temperature %d\n", data);
+    //sensor.temperature = data;
+    double v_uncomp_pressure_s32;
+	double v_uncomp_temperature_s32;
+	double v_uncomp_humidity_s32;
+    readDataBmp(bmp, &v_uncomp_pressure_s32,&v_uncomp_temperature_s32, &v_uncomp_humidity_s32);
 }
 
 void displayData()
@@ -886,8 +890,9 @@ void app_main(void)
     // Initialize BMP280
     bmp._sda = GPIO_NUM_22;
     bmp._slc = GPIO_NUM_23;
-    bmp._address = 0x76;
+    bmp.dev_addr = 0x76;
     initBMP(&bmp);
+    readBmp();
 
     // Initialize noise
     noise.adc_atten = ADC_ATTEN_DB_11;
