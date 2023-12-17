@@ -46,8 +46,8 @@
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
-
 #include <sys/socket.h>
+#include "esp_sleep.h"
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -168,7 +168,7 @@ void setMacToMqtt()
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
     logOlded(macAddress);
-    device.config.credentials.client_id = macAddress;
+   // device.config.credentials.client_id = macAddress;
 }
 
 void wifi_init_sta(const char *running_partition_label)
@@ -853,6 +853,27 @@ static void button_handler_task(void *arg)
     }
 }
 
+// RTC_IO to wakeup thus requires RTC peripherals
+//Only RTC IO can be used as a source for external wake
+//source. They are pins: 0,2,4,12-15,25-27,32-39.
+static void manager_sleep(void *arg)
+{
+  
+    while (1)
+    {
+          /* code */
+        delayms(60 * 1000);
+        if(device.client==NULL){
+            esp_sleep_enable_ext0_wakeup(button.gpio, 1);
+            logOlded("sleep mode");
+            esp_deep_sleep_start();
+        }
+    }
+    
+
+}
+
+
 void initButton(TouchButton *button)
 {
     button->status = BUTTON_STATE_RELEASE;
@@ -883,7 +904,8 @@ void app_main(void)
     initAdc1(&lux);
 
     // Initialize touch button
-    button.gpio = GPIO_NUM_21;
+    //GPIO_NUM_21
+    button.gpio = GPIO_NUM_27;
     button.sensitivity = 100;
     initButton(&button);
 
@@ -892,7 +914,7 @@ void app_main(void)
     bmp._slc = GPIO_NUM_23;
     bmp.dev_addr = 0x76;
     initBMP(&bmp);
-    readBmp();
+    //readBmp();
 
     // Initialize noise
     noise.adc_atten = ADC_ATTEN_DB_11;
@@ -906,4 +928,5 @@ void app_main(void)
     event_group = xEventGroupCreate();
     xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
     xTaskCreate(&button_handler_task, "button_handler_task", 4 * 1024, NULL, 5, NULL);
+    xTaskCreate(&manager_sleep, "manager_sleep", 4 * 1023, NULL, 6, NULL);
 }
