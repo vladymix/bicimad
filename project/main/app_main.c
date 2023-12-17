@@ -325,9 +325,9 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     // Crear json que se quiere enviar al ThingsBoard
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "lux", sensor.lux);
-    cJSON_AddNumberToObject(root, "humidity", sensor.humidity);
-    cJSON_AddNumberToObject(root, "temperature", sensor.temperature);
-    cJSON_AddNumberToObject(root, "noise", sensor.noise);
+    cJSON_AddNumberToObject(root, "humidity", sensor.humidity + 20);
+    cJSON_AddNumberToObject(root, "temperature", sensor.temperature+20);
+    cJSON_AddNumberToObject(root, "noise", sensor.noise+1000);
     cJSON_AddNumberToObject(root, "pressure", sensor.pressure);
     cJSON_AddNumberToObject(root, "display_mode", sensor.mode);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
