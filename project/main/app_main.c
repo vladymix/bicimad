@@ -168,7 +168,7 @@ void setMacToMqtt()
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
     logOlded(macAddress);
-   // device.config.credentials.client_id = macAddress;
+    // device.config.credentials.client_id = macAddress;
 }
 
 void wifi_init_sta(const char *running_partition_label)
@@ -539,13 +539,13 @@ void readNoise()
 
 void readBmp()
 {
-    //uint8_t data = readTemperature(bmp);
-    //printf("Data is temperature %d\n", data);
-    //sensor.temperature = data;
+    // uint8_t data = readTemperature(bmp);
+    // printf("Data is temperature %d\n", data);
+    // sensor.temperature = data;
     double v_uncomp_pressure_s32;
-	double v_uncomp_temperature_s32;
-	double v_uncomp_humidity_s32;
-    readDataBmp(bmp, &v_uncomp_pressure_s32,&v_uncomp_temperature_s32, &v_uncomp_humidity_s32);
+    double v_uncomp_temperature_s32;
+    double v_uncomp_humidity_s32;
+    readDataBmp(bmp, &v_uncomp_pressure_s32, &v_uncomp_temperature_s32, &v_uncomp_humidity_s32);
 }
 
 void displayData()
@@ -854,25 +854,25 @@ static void button_handler_task(void *arg)
 }
 
 // RTC_IO to wakeup thus requires RTC peripherals
-//Only RTC IO can be used as a source for external wake
-//source. They are pins: 0,2,4,12-15,25-27,32-39.
+// Only RTC IO can be used as a source for external wake
+// source. They are pins: 0,2,4,12-15,25-27,32-39.
 static void manager_sleep(void *arg)
 {
-  
+
     while (1)
     {
-          /* code */
+        /* code */
         delayms(60 * 1000);
-        if(device.client==NULL){
+        if (device.client == NULL)
+        {
             esp_sleep_enable_ext0_wakeup(button.gpio, 1);
-            logOlded("sleep mode");
+            logOlded("Enter in sleep");
+            delayms(5 * 1000);
+            oled_clear_screen(&oled, false);
             esp_deep_sleep_start();
         }
     }
-    
-
 }
-
 
 void initButton(TouchButton *button)
 {
@@ -887,8 +887,9 @@ void app_main(void)
     //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
     //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
     // h6s7vg0nliofvy0c4lfk // sbc
+    // 8plu6opoxckrvvw9gjx7 thisnger io mario 
     device.event_handler = mqtt_event_handler;
-    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "tkbgb5tmw13oivovd6q3");
+    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "8plu6opoxckrvvw9gjx7");
 
     sensor.mode = DISPLAY_NOISE;
     // Initialize OLED
@@ -904,7 +905,7 @@ void app_main(void)
     initAdc1(&lux);
 
     // Initialize touch button
-    //GPIO_NUM_21
+    // GPIO_NUM_21
     button.gpio = GPIO_NUM_27;
     button.sensitivity = 100;
     initButton(&button);
@@ -914,7 +915,7 @@ void app_main(void)
     bmp._slc = GPIO_NUM_23;
     bmp.dev_addr = 0x76;
     initBMP(&bmp);
-    //readBmp();
+    // readBmp();
 
     // Initialize noise
     noise.adc_atten = ADC_ATTEN_DB_11;
