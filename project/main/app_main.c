@@ -168,7 +168,7 @@ void setMacToMqtt()
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
     logOlded(macAddress);
-    // device.config.credentials.client_id = macAddress;
+    //device.config.credentials.client_id = macAddress;
 }
 
 void wifi_init_sta(const char *running_partition_label)
@@ -893,7 +893,7 @@ void app_main(void)
     // h6s7vg0nliofvy0c4lfk // sbc
     // 8plu6opoxckrvvw9gjx7 thisnger io mario
     device.event_handler = mqtt_event_handler;
-    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "b57qiyaox4ndlk5jc4m1");
+    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "5nru3umt4lw1g4xdkzgg");
 
     sensor.mode = DISPLAY_TEMPERATURE;
     // Initialize OLED
