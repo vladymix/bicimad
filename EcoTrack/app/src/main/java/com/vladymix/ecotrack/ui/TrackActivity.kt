@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.vladymix.ecotrack.R
 import com.vladymix.ecotrack.service.LocationService
+import java.util.Calendar
 
 class TrackActivity : AppCompatActivity() {
     private lateinit var textView: TextView
@@ -35,7 +36,15 @@ class TrackActivity : AppCompatActivity() {
                 Toast.makeText(baseContext, "Location changed", Toast.LENGTH_LONG).show()
                 val buffer = StringBuffer(textView.text)
                 buffer.append("\n")
-                buffer.append("${currentLocation}")
+                var date = ""
+                Calendar.getInstance().let {
+                    date += (it.get(Calendar.HOUR_OF_DAY))
+                    date += (":")
+                    date += (it.get(Calendar.MINUTE))
+                    date += (":")
+                    date += (it.get(Calendar.SECOND))
+                }
+                buffer.append("$date lat:${currentLocation.latitude} lon:${currentLocation.longitude}")
                 textView.text = buffer.toString()
                 viewModel.sendData(currentLocation.latitude, currentLocation.longitude)
             }
