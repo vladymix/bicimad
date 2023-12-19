@@ -218,8 +218,8 @@ void wifi_init_sta(const char *running_partition_label)
      };*/
 
     wifi_sta_config_t wifi_sta_config = {
-        .ssid = "SKYNET_2G",
-        .password = "4cedjte6xegw",
+        .ssid = "SKYNET",
+        .password = "volvere1990",
     };
 
     /* wifi_sta_config_t wifi_sta_config = {
@@ -642,6 +642,7 @@ void ota_task(void *pvParameter)
             logOlded("Retry conect");
             ESP_LOGE(TAG, "Retry conect");
             // state = STATE_INITIAL;
+            break;
         }
         case STATE_INITIAL:
         {
