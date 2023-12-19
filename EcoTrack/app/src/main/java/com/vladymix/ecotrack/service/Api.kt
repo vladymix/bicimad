@@ -18,7 +18,7 @@ class Api {
     private lateinit var device: String
 
     companion object {
-        private val BASE_URL = "https://thingsboard.cloud"
+        private val BASE_URL = "http://iot.etsisi.upm.es:1880"
         private var instance: Api? = null
         fun getInstance(): Api {
             if (instance == null) {
@@ -48,6 +48,20 @@ class Api {
         withContext(Dispatchers.IO) {
             try {
                 val response = service.postData(device, LocationRequest(latitude, longitude))
+                if (response.isSuccessful) {
+                    Log.i("API","Send data successful")
+                }
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
+        }
+
+    }
+
+    suspend fun sendLocationSbc(latitude: Double, longitude: Double) {
+        withContext(Dispatchers.IO) {
+            try {
+                val response = service.postDataSbc(LocationRequest(latitude, longitude))
                 if (response.isSuccessful) {
                     Log.i("API","Send data successful")
                 }

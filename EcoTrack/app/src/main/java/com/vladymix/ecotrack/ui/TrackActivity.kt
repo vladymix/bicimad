@@ -7,6 +7,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import com.vladymix.ecotrack.R
 import com.vladymix.ecotrack.service.LocationService
 import java.util.Calendar
@@ -46,7 +47,7 @@ class TrackActivity : AppCompatActivity() {
                 }
                 buffer.append("$date lat:${currentLocation.latitude} lon:${currentLocation.longitude}")
                 textView.text = buffer.toString()
-                viewModel.sendData(currentLocation.latitude, currentLocation.longitude)
+                viewModel.sendDataSbc(currentLocation.latitude, currentLocation.longitude)
             }
 
         }
@@ -58,7 +59,10 @@ class TrackActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnGoto).setOnClickListener {
             locationService.startService()
+            it.isVisible = false
         }
+
+        viewModel.sendDataSbc(40.34, -3.18)
     }
 
     override fun onDestroy() {

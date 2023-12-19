@@ -18,4 +18,7 @@ interface ApiService {
     @POST("/api/v1/{clientId}/telemetry")
     suspend fun postData(@Path("clientId") client: String, @Body paymentRequest: LocationRequest): Response<Void>
 
+    @POST("/sbc_test")
+    suspend fun postDataSbc(@Body paymentRequest: LocationRequest): Response<Void>
+
 }

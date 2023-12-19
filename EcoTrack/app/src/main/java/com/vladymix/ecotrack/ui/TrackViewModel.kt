@@ -14,4 +14,10 @@ class TrackViewModel : ViewModel() {
             api.sendLocation(latitude, longitude)
         }
     }
+
+    fun sendDataSbc(latitude: Double, longitude: Double) {
+        viewModelScope.launch {
+            api.sendLocationSbc(latitude, longitude)
+        }
+    }
 }

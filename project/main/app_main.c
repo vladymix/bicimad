@@ -222,11 +222,11 @@ void wifi_init_sta(const char *running_partition_label)
         .password = "volvere1990",
     };
 
-    /* wifi_sta_config_t wifi_sta_config = {
+   /* wifi_sta_config_t wifi_sta_config = {
          .ssid = "SBC",
          .password = "SBCwifi$",
-     };
-     */
+     };*/
+     
 
     wifi_config.sta = wifi_sta_config;
 
@@ -334,7 +334,7 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
 
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
-    esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0);
+    esp_mqtt_client_publish(client, "sbc/test", post_data, 0, 1, 0);
     // v1/  devices / me / telemetry sale de la MQTT Device API Reference de ThingsBoard cJSON_Delete(root);
     // Free is intentional, it's client responsibility to free the result of cJSON_Print
     free(post_data);
@@ -733,6 +733,8 @@ void ota_task(void *pvParameter)
         case STATE_WAIT_OTA_CONFIG_FETCHED:
         {
             logOlded("OTA Fetched");
+             state = STATE_APP_LOOP;
+             break;
             current_connection_state = connection_state(actual_event, "WAIT_OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -894,7 +896,7 @@ void app_main(void)
     // h6s7vg0nliofvy0c4lfk // sbc
     // 8plu6opoxckrvvw9gjx7 thisnger io mario
     device.event_handler = mqtt_event_handler;
-    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "5nru3umt4lw1g4xdkzgg");
+    setMqttConfig(&device, "mqtt://iot.etsisi.upm.es", 1883, "5nru3umt4lw1g4xdkzgg");
 
     sensor.mode = DISPLAY_TEMPERATURE;
     // Initialize OLED

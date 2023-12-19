@@ -25,8 +25,8 @@ void setMqttConfig(Device *device, char *url, int port, char *clientId)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = url,
-        .broker.address.port = port,
-        .credentials.username = clientId}; // FUTURE USE MAC
+        .broker.address.port = port
+        }; // FUTURE USE MAC .credentials.username = clientId
 
     device->config = mqtt_cfg;
 }
