@@ -31,6 +31,7 @@
 #include "cJSON.h"
 #include "libs/sbc.h"
 #include "libs/mqtt.h"
+#include "libs/wifi_manager.h"
 
 #include <esp_timer.h>
 
@@ -179,6 +180,7 @@ void wifi_init_sta(const char *running_partition_label)
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -635,6 +637,7 @@ void ota_task(void *pvParameter)
                                                false, false, portMAX_DELAY);
         }
 
+        printf("State is %d\n", state);
         switch (state)
         {
         case STATE_RETRY_CONECTED:
@@ -642,9 +645,12 @@ void ota_task(void *pvParameter)
             logOlded("Retry conect");
             ESP_LOGE(TAG, "Retry conect");
             // state = STATE_INITIAL;
+            break;
         }
+        
         case STATE_INITIAL:
         {
+             printf("STATE_INITIAL\n");
             logOlded("Initializing");
             // Initialize NVS.
             esp_err_t err = nvs_flash_init();
@@ -662,11 +668,25 @@ void ota_task(void *pvParameter)
             strncpy(running_partition_label, running_partition->label, sizeof(running_partition_label));
             ESP_LOGI(TAG, "Running partition: %s", running_partition_label);
 
-            wifi_init_sta(running_partition);
-            state = STATE_WAIT_WIFI;
+           //TODO wifi_init_sta(running_partition);
+          // TODO  state = STATE_WAIT_WIFI;
+           ESP_ERROR_CHECK(esp_netif_init());
+           ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+            printf("Change to STATE_WIFI_AP");
+            state = STATE_WIFI_AP;
             break;
+             
         }
+        
+        case STATE_WIFI_AP:{
+         printf("case STATE_WIFI_AP\n");
+         logOlded("192.168.4.1");
+       //  wifi_manager_start();
+         break;
+        }
+      
+
         case STATE_WAIT_WIFI:
         {
             logOlded("wait wifi");
