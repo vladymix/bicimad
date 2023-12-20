@@ -61,7 +61,7 @@ static const char *TAG = "App Main";
 
 // *******   DEVICES  ***********
 AnalogicDevice lux;
-AnalogicDevice noise;
+AnalogicDevice plants;
 OLed oled;
 TouchButton button;
 Sensor sensor;
@@ -167,7 +167,6 @@ void setMacToMqtt()
 {
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
-    logOlded(macAddress);
     //device.config.credentials.client_id = macAddress;
 }
 
@@ -218,8 +217,8 @@ void wifi_init_sta(const char *running_partition_label)
      };*/
 
     wifi_sta_config_t wifi_sta_config = {
-        .ssid = "SKYNET",
-        .password = "volvere1990",
+        .ssid = "SKYNET_2G",
+        .password = "4cedjte6xegw",
     };
 
     /* wifi_sta_config_t wifi_sta_config = {
@@ -327,10 +326,10 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "lux", sensor.lux);
     cJSON_AddNumberToObject(root, "humidity", sensor.humidity);
     cJSON_AddNumberToObject(root, "temperature", sensor.temperature);
-    cJSON_AddNumberToObject(root, "noise", sensor.noise);
+    cJSON_AddNumberToObject(root, "plants", sensor.plants);
     cJSON_AddNumberToObject(root, "pressure", sensor.pressure);
     cJSON_AddNumberToObject(root, "display_mode", sensor.mode);
-    cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
+    cJSON_AddNumberToObject(root, "mtime", esp_timer_get_time());
 
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
@@ -532,10 +531,10 @@ void readLux()
     ESP_LOGW(TAG, "Read Lux %d.\n", sensor.lux);
 }
 
-void readNoise()
+void readPlants()
 {
-    sensor.noise = readAdc1Value(&noise);
-    ESP_LOGW(TAG, "Read Noise %d.\n", sensor.noise);
+    sensor.plants = readAdc1Value(&plants);
+    ESP_LOGW(TAG, "Read plants %d.\n", sensor.plants);
 }
 
 void readBmp()
@@ -550,12 +549,21 @@ void displayData()
     switch (sensor.mode)
     {
 
-    case DISPLAY_NOISE:
+    case DISPLAY_PLANT:
         /* code */
-        char dataNoise[14];
-        sprintf(dataNoise, "%d", sensor.noise);
-        oled_display_text(&oled, 1, "Noise is: ", false);
-        oled_display_text(&oled, 2, dataNoise, false);
+        char dataPlants[14];
+ 
+        // 4095 - 1300 = 2795 = 100% humedad
+
+        // 2795 = 100%
+        // v    = x%
+        //x& = (100*v)2795
+
+        int value = (4095 - sensor.plants);
+        double percentage = (100*value)/2795.0;
+        sprintf(dataPlants, "%f", percentage);
+        oled_display_text(&oled, 1, "Plant is: ", false);
+        oled_display_text(&oled, 2, dataPlants, false);
         break;
 
     case DISPLAY_LUX:
@@ -602,7 +610,7 @@ void logicSensor()
     {
         readLux();
         readBmp();
-        readNoise();
+        readPlants();
         displayData();
         sendData(device.client, sensor);
         logOlded("Reading sensors");
@@ -793,7 +801,7 @@ void ota_task(void *pvParameter)
             }
 
             logicSensor();
-            delayms(30000);
+            delayms(5000);
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
@@ -896,22 +904,16 @@ void app_main(void)
     device.event_handler = mqtt_event_handler;
     setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "5nru3umt4lw1g4xdkzgg");
 
-    sensor.mode = DISPLAY_TEMPERATURE;
+    sensor.mode = DISPLAY_PLANT;
     // Initialize OLED
     oled._sda = CONFIG_SDA_GPIO;
     oled._slc = CONFIG_SCL_GPIO;
     oled._reset = CONFIG_RESET_GPIO;
     initOled(&oled);
 
-    // Initialize LDR
-    lux.channel = ADC1_CHANNEL_4;
-    lux.adc_atten = ADC_ATTEN_DB_11;
-    lux.adc_bits_width_t = ADC_WIDTH_BIT_12;
-    initAdc1(&lux);
-
     // Initialize touch button
-    // GPIO_NUM_21
-    button.gpio = GPIO_NUM_27;
+    // GPIO_NUM_21 to sleep GPIO_NUM_27
+    button.gpio = GPIO_NUM_21;
     button.sensitivity = 100;
     initButton(&button);
 
@@ -922,11 +924,11 @@ void app_main(void)
     initBMP(&bmp);
     // readBmp();
 
-    // Initialize noise
-    noise.adc_atten = ADC_ATTEN_DB_11;
-    noise.adc_bits_width_t = ADC_WIDTH_BIT_12;
-    noise.channel = ADC1_CHANNEL_7;
-    initAdc1(&noise);
+    // Initialize plants
+    plants.adc_atten = ADC_ATTEN_DB_11;
+    plants.adc_bits_width_t = ADC_WIDTH_BIT_12;
+    plants.channel = ADC1_CHANNEL_7;
+    initAdc1(&plants);
 
     oled_clear_screen(&oled, false);
     logOlded(FIRMWARE_VERSION);

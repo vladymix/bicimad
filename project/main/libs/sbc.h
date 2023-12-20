@@ -382,7 +382,7 @@ typedef enum
     DISPLAY_HUMIDITY,
     DISPLAY_TEMPERATURE,
     DISPLAY_PRESSURE,
-    DISPLAY_NOISE,
+    DISPLAY_PLANT,
 } DisplayMode;
 
 typedef struct
@@ -391,7 +391,7 @@ typedef struct
     int lux;
     double temperature;
     double humidity;
-    int noise;
+    int plants;
     double pressure;
 } Sensor;
 
