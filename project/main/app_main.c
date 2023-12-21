@@ -801,7 +801,7 @@ void ota_task(void *pvParameter)
             }
 
             logicSensor();
-            delayms(5000);
+            delayms(60 * 1000);
 
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
@@ -897,12 +897,8 @@ void initButton(TouchButton *button)
 
 void app_main(void)
 {
-    //{clientId:"ckawzufasqcuwqy7i7gf"} sbc
-    //{clientId:"ab2xshew87rhk9md6c0i"} Bici map
-    // h6s7vg0nliofvy0c4lfk // sbc
-    // 8plu6opoxckrvvw9gjx7 thisnger io mario
     device.event_handler = mqtt_event_handler;
-    setMqttConfig(&device, "mqtt://mqtt.thingsboard.cloud", 1883, "5nru3umt4lw1g4xdkzgg");
+    setMqttConfig(&device, "mqtt://demo.thingsboard.io", 1883, "pdt08rj6rio4u1sqm4u6");
 
     sensor.mode = DISPLAY_PLANT;
     // Initialize OLED
