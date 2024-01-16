@@ -26,7 +26,7 @@
             app:layout_constraintStart_toStartOf="parent" />
 
         <EditText
-            android:text="5nru3umt4lw1g4xdkzgg"
+            android:text="00:1B:44:11:3A:B7"
             android:id="@+id/editTextDevice"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

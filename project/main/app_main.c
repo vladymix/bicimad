@@ -59,6 +59,12 @@ static EventGroupHandle_t s_wifi_event_group;
 static EventGroupHandle_t event_group;
 static const char *TAG = "App Main";
 
+#define MAX_HTTP_OUTPUT_BUFFER 2048
+
+#define SSID "SKYNET"
+#define PASSWORD "volvere1990"
+#define UPDATE_EVERY_MS 5000
+
 // *******   DEVICES  ***********
 AnalogicDevice lux;
 AnalogicDevice noise;
@@ -95,34 +101,71 @@ void notify_wifi_disconnected()
     xEventGroupSetBits(event_group, WIFI_DISCONNECTED_EVENT);
 }
 
-static void event_handler(void *arg, esp_event_base_t event_base,
-                          int32_t event_id, void *event_data)
+static char msg_json[2048];
+
+void readLastLocation()
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    ESP_LOGW(TAG, "Reading Last location");
+    esp_http_client_config_t config = {
+        .url = "https://apiservice.vladymix.es/locations/gps/00:1B:44:11:3A:B7",
+        .transport_type = HTTP_TRANSPORT_OVER_SSL,
+        //.cert_pem = (char *)vladymix_cert_pem_start,
+        .crt_bundle_attach = esp_crt_bundle_attach};
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    esp_http_client_set_method(client, HTTP_METHOD_GET);
+
+    esp_err_t ret = esp_http_client_open(client, 0);
+    if (ret == ESP_OK)
     {
-        esp_wifi_connect();
-    }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
-    {
-        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY)
+        if (esp_http_client_fetch_headers(client) == ESP_FAIL)
         {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
+            ret = ESP_FAIL;
+        }
+        if (ret == ESP_FAIL)
+        {
+            ESP_LOGE(TAG, "Fallo al leer last location");
+            return;
+        }
+
+        char output_buffer[MAX_HTTP_OUTPUT_BUFFER + 1] = {0};
+
+        int data_read = esp_http_client_read_response(client, output_buffer, MAX_HTTP_OUTPUT_BUFFER);
+        if (data_read >= 0)
+        {
+            ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %" PRId64,
+                     esp_http_client_get_status_code(client),
+                     esp_http_client_get_content_length(client));
+            int data_len = esp_http_client_get_content_length(client);
+            memcpy(msg_json, output_buffer, data_len);
+            msg_json[data_len] = 0;
+            cJSON *attributes = cJSON_Parse(msg_json);
+            if (attributes != NULL)
+            {
+                cJSON *j_locations = cJSON_GetObjectItem(attributes, "locations");
+                cJSON *j_location = cJSON_GetArrayItem(j_locations, 0);
+                cJSON *j_lat = cJSON_GetObjectItem(j_location, "lat");
+                cJSON *j_lon = cJSON_GetObjectItem(j_location, "lon");
+                sensor.latitude = j_lat->valuedouble;
+                sensor.longitude = j_lon->valuedouble;
+            }
+            else
+            {
+                ESP_LOGE(TAG, "attributes is NULL");
+            }
+
+            cJSON_Delete(attributes);
+            esp_http_client_cleanup(client);
         }
         else
         {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            notify_wifi_connected();
+            ESP_LOGE(TAG, "Failed to read response");
         }
-        ESP_LOGI(TAG, "connect to the AP fail");
+
+        ESP_LOGW(TAG, "Last location readed");
     }
-    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    else
     {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        ESP_LOGE(TAG, "Error read url %d", ret);
     }
 }
 
@@ -163,12 +206,45 @@ static void logOlded(char *log)
     oled_display_text(&oled, 7, log, false);
 }
 
+static void event_handler_wifi(void *arg, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    {
+        esp_wifi_connect();
+    }
+    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+    {
+        if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY)
+        {
+            esp_wifi_connect();
+            s_retry_num++;
+            ESP_LOGI(TAG, "retry to connect to the AP");
+            logOlded("Try connect");
+        }
+        else
+        {
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            notify_wifi_connected();
+            logOlded("Connected");
+        }
+        ESP_LOGI(TAG, "connect to the AP fail");
+    }
+    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
+    {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        s_retry_num = 0;
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+    }
+}
+
 void setMacToMqtt()
 {
     char macAddress[30];
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X", esp32_mac[0], esp32_mac[1], esp32_mac[2], esp32_mac[3], esp32_mac[4], esp32_mac[5]);
     logOlded(macAddress);
-    //device.config.credentials.client_id = macAddress;
+    // device.config.credentials.client_id = macAddress;
 }
 
 void wifi_init_sta(const char *running_partition_label)
@@ -218,15 +294,14 @@ void wifi_init_sta(const char *running_partition_label)
      };*/
 
     wifi_sta_config_t wifi_sta_config = {
-        .ssid = "SKYNET",
-        .password = "volvere1990",
+        .ssid = SSID,
+        .password = PASSWORD,
     };
 
-   /* wifi_sta_config_t wifi_sta_config = {
-         .ssid = "SBC",
-         .password = "SBCwifi$",
-     };*/
-     
+    /* wifi_sta_config_t wifi_sta_config = {
+          .ssid = "SBC",
+          .password = "SBCwifi$",
+      };*/
 
     wifi_config.sta = wifi_sta_config;
 
@@ -234,12 +309,12 @@ void wifi_init_sta(const char *running_partition_label)
     esp_event_handler_instance_t instance_got_ip;
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
-                                                        &event_handler,
+                                                        &event_handler_wifi,
                                                         NULL,
                                                         &instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
+                                                        &event_handler_wifi,
                                                         NULL,
                                                         &instance_got_ip));
 
@@ -252,6 +327,7 @@ void wifi_init_sta(const char *running_partition_label)
     APP_ABORT_ON_ERROR(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
+    logOlded("Wifi sta end");
 
     /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
      * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
@@ -267,15 +343,18 @@ void wifi_init_sta(const char *running_partition_label)
     {
         ESP_LOGI(TAG, "connected to WIFI");
         notify_wifi_connected();
+        logOlded("Conected");
     }
     else if (bits & WIFI_FAIL_BIT)
     {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", "CONFIG_EXAMPLE_WIFI_SSID", "CONFIG_EXAMPLE_WIFI_PASSWORD");
+        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", SSID, PASSWORD);
         notify_wifi_disconnected();
+        logOlded("Error wifi");
     }
     else
     {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
+        logOlded("UNEXPECTED");
     }
 }
 
@@ -330,6 +409,8 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "noise", sensor.noise);
     cJSON_AddNumberToObject(root, "pressure", sensor.pressure);
     cJSON_AddNumberToObject(root, "display_mode", sensor.mode);
+    cJSON_AddNumberToObject(root, "latitude", sensor.latitude);
+    cJSON_AddNumberToObject(root, "longitude", sensor.longitude);
     cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
 
     char *post_data = cJSON_PrintUnformatted(root);
@@ -505,7 +586,7 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
         ESP_LOGI(TAG, "Firmware URL: %s", ota_config.targetFwServerUrl);
         esp_http_client_config_t config = {
             .url = ota_config.targetFwServerUrl,
-            .cert_pem = (char *)server_cert_pem_start,
+            .cert_pem = (char *)vladymix_cert_pem_start,
             .event_handler = _ota_http_event_handler,
         };
         logOlded("Download...");
@@ -529,13 +610,13 @@ static void start_ota(const char *current_ver, struct shared_keys ota_config)
 void readLux()
 {
     sensor.lux = readAdc1Value(&lux);
-    ESP_LOGW(TAG, "Read Lux %d.\n", sensor.lux);
+    ESP_LOGI(TAG, "Read Lux %d.", sensor.lux);
 }
 
 void readNoise()
 {
     sensor.noise = readAdc1Value(&noise);
-    ESP_LOGW(TAG, "Read Noise %d.\n", sensor.noise);
+    ESP_LOGI(TAG, "Read Noise %d.", sensor.noise);
 }
 
 void readBmp()
@@ -600,12 +681,14 @@ void logicSensor()
 {
     if (device.client)
     {
+        logOlded("Reading sensors");
+        ESP_LOGW(TAG, "Reading sensors");
         readLux();
         readBmp();
         readNoise();
         displayData();
+        ESP_LOGW(TAG, "Send data sensors");
         sendData(device.client, sensor);
-        logOlded("Reading sensors");
     }
     else
     {
@@ -646,7 +729,7 @@ void ota_task(void *pvParameter)
         }
         case STATE_INITIAL:
         {
-            logOlded("Initializing");
+            logOlded("Wait Initial");
             // Initialize NVS.
             esp_err_t err = nvs_flash_init();
             if (err == ESP_ERR_NVS_NO_FREE_PAGES)
@@ -733,8 +816,8 @@ void ota_task(void *pvParameter)
         case STATE_WAIT_OTA_CONFIG_FETCHED:
         {
             logOlded("OTA Fetched");
-             state = STATE_APP_LOOP;
-             break;
+            state = STATE_APP_LOOP;
+            break;
             current_connection_state = connection_state(actual_event, "WAIT_OTA_CONFIG_FETCHED");
             if (current_connection_state != STATE_CONNECTION_IS_OK)
             {
@@ -794,11 +877,14 @@ void ota_task(void *pvParameter)
                 break;
             }
 
-            logicSensor();
-            delayms(30000);
-
             if (actual_event & (WIFI_CONNECTED_EVENT | MQTT_CONNECTED_EVENT))
             {
+                readLastLocation();
+                logicSensor();
+                delayms(1000);
+                oled_display_clear(&oled, 7);
+                delayms(UPDATE_EVERY_MS - 1000);
+
                 ota_events = xEventGroupWaitBits(event_group, OTA_CONFIG_UPDATED_EVENT, false, true, 0);
                 if ((ota_events & OTA_CONFIG_UPDATED_EVENT))
                 {
