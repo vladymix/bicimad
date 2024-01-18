@@ -2,11 +2,13 @@ package com.vladymix.ecotrack.service
 
 import android.util.Log
 import com.google.gson.GsonBuilder
+import com.vladymix.ecotrack.service.models.Device
 import com.vladymix.ecotrack.service.models.LocationRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import retrofit2.awaitResponse
 import retrofit2.converter.gson.GsonConverterFactory
 
 
@@ -71,4 +73,13 @@ class Api {
         }
 
     }
+    suspend  fun getData(): Device? {
+        val url = service.getSensorData()
+       val respo =  url.awaitResponse()
+        if(respo.isSuccessful)
+            return  respo.body()
+        return null
+    }
+
+
 }

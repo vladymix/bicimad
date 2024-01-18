@@ -61,8 +61,8 @@ static const char *TAG = "App Main";
 
 #define MAX_HTTP_OUTPUT_BUFFER 2048
 
-#define SSID "SKYNET"
-#define PASSWORD "volvere1990"
+#define SSID "SKYNET_2G"
+#define PASSWORD "4cedjte6xegw"
 #define UPDATE_EVERY_MS 5000
 
 // *******   DEVICES  ***********
@@ -411,7 +411,7 @@ static void sendData(esp_mqtt_client_handle_t client, Sensor sensor)
     cJSON_AddNumberToObject(root, "display_mode", sensor.mode);
     cJSON_AddNumberToObject(root, "latitude", sensor.latitude);
     cJSON_AddNumberToObject(root, "longitude", sensor.longitude);
-    cJSON_AddNumberToObject(root, "time", esp_timer_get_time());
+    cJSON_AddNumberToObject(root, "log_time", esp_timer_get_time());
 
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos

@@ -4,6 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#cbcbcb"
     tools:context=".ui.MapsActivity">
 
 
@@ -34,162 +35,180 @@
 
 
     <androidx.constraintlayout.widget.ConstraintLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="-30dp"
-        android:padding="16dp"
         map:layout_constraintBottom_toBottomOf="parent"
         map:layout_constraintEnd_toEndOf="parent"
         map:layout_constraintStart_toStartOf="parent"
         map:layout_constraintTop_toBottomOf="@+id/constraintLayout">
 
-        <androidx.cardview.widget.CardView
-            android:id="@+id/cardTemperature"
-            android:layout_width="120dp"
+        <LinearLayout
+            android:id="@+id/cars"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            map:cardCornerRadius="16dp"
-            map:cardElevation="0dp"
-            map:contentPadding="8dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:orientation="horizontal"
+            map:layout_constraintEnd_toEndOf="parent"
             map:layout_constraintStart_toStartOf="parent"
             map:layout_constraintTop_toTopOf="parent">
 
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content">
-
-                <ImageView
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:padding="8dp"
-                    android:src="@drawable/thermometer_temperature"
-                    map:tint="?android:textColorPrimary" />
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardTemperature"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                map:cardCornerRadius="16dp"
+                map:cardElevation="0dp"
+                map:contentPadding="8dp">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_height="wrap_content">
 
-                    <TextView
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:src="@drawable/thermometer_temperature"
+                        map:tint="?android:textColorPrimary" />
+
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="13ºC"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
+                        android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Temp"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/tvTemperature"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="13ºC"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Temerature"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
                 </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardHumidity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
 
-        <androidx.cardview.widget.CardView
-            android:id="@+id/cardHumidity"
-            android:layout_width="120dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-
-            map:cardCornerRadius="16dp"
-            map:cardElevation="0dp"
-            map:contentPadding="8dp"
-            map:layout_constraintStart_toEndOf="@+id/cardTemperature"
-            map:layout_constraintTop_toTopOf="parent">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content">
-
-                <ImageView
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:padding="8dp"
-                    android:src="@drawable/sound_2_svgrepo_com"
-                    map:tint="?android:textColorPrimary" />
+                map:cardCornerRadius="16dp"
+                map:cardElevation="0dp"
+                map:contentPadding="8dp"
+                map:layout_constraintStart_toEndOf="@+id/cardTemperature"
+                map:layout_constraintTop_toTopOf="parent">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_height="wrap_content">
 
-                    <TextView
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:src="@drawable/sound_2_svgrepo_com"
+                        map:tint="?android:textColorPrimary" />
+
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="45 db"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
+                        android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Noise"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/tvNoise"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="45 db"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Noise"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
                 </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/cardPresure"
-            android:layout_width="120dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            map:cardCornerRadius="16dp"
-            map:cardElevation="0dp"
-            map:contentPadding="8dp"
-            map:layout_constraintStart_toEndOf="@+id/cardHumidity"
-            map:layout_constraintTop_toTopOf="parent">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content">
-
-                <ImageView
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:padding="8dp"
-                    android:src="@drawable/humidity_svgrepo_com"
-                    map:tint="?android:textColorPrimary" />
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardPresure"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                map:cardCornerRadius="16dp"
+                map:cardElevation="0dp"
+                map:contentPadding="8dp"
+                map:layout_constraintStart_toEndOf="@+id/cardHumidity"
+                map:layout_constraintTop_toTopOf="parent">
 
                 <LinearLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
+                    android:layout_height="wrap_content">
 
-                    <TextView
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:src="@drawable/humidity_svgrepo_com"
+                        map:tint="?android:textColorPrimary" />
+
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="95%"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="20sp"
-                        android:textStyle="bold" />
+                        android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Humedad"
-                        android:textColor="?android:textColorPrimary"
-                        android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/tvHumidity"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="95%"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="16sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Humidity"
+                            android:textColor="?android:textColorPrimary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
                 </LinearLayout>
+            </androidx.cardview.widget.CardView>
 
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
+        </LinearLayout>
 
 
         <TextView
             android:id="@+id/lastlocation"
-            android:layout_marginTop="5dp"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:text="Last location"
             map:layout_constraintStart_toStartOf="parent"
-            map:layout_constraintTop_toBottomOf="@+id/cardHumidity" />
+            map:layout_constraintTop_toBottomOf="@+id/cars" />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

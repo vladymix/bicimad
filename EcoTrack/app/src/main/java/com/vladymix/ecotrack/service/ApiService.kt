@@ -1,5 +1,6 @@
 package com.vladymix.ecotrack.service
 
+import com.vladymix.ecotrack.service.models.Device
 import com.vladymix.ecotrack.service.models.LocationRequest
 import retrofit2.Call
 import retrofit2.Response
@@ -20,5 +21,8 @@ interface ApiService {
 
     @POST("/sbc_test")
     suspend fun postDataSbc(@Body paymentRequest: LocationRequest): Response<Void>
+
+    @GET("/test_test")
+    fun getSensorData(): Call<Device>
 
 }
